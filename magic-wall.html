@@ -271,7 +271,14 @@ video#cam.cam-on{opacity:1}
 <div id="hint">👋 Wave to say hi!</div>
 <div id="debug"></div>
 
-<!-- Remote connect -->
+<!-- Game iframe -->
+<div id="gw" style="position:fixed;inset:0;z-index:5;display:none;background:#000"><iframe id="gf" allow="camera;microphone" sandbox="allow-scripts allow-same-origin allow-popups" style="width:100%;height:100%;border:none"></iframe></div>
+<button id="gb" style="display:none;position:fixed;top:max(12px,env(safe-area-inset-top,12px));left:max(12px,env(safe-area-inset-left,12px));z-index:6;padding:8px 14px;background:rgba(0,0,0,.75);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;font-family:inherit;font-size:11px;letter-spacing:1px;cursor:pointer">✕ Back to Wall</button>
+
+<!-- Game dock -->
+<div id="gdock" style="position:fixed;bottom:max(12px,env(safe-area-inset-bottom,12px));left:50%;transform:translateX(-50%);z-index:20;display:none;gap:6px;flex-wrap:wrap;justify-content:center;max-width:90vw"></div>
+
+
 <div id="remote-panel" style="position:fixed;bottom:max(12px,env(safe-area-inset-bottom,12px));right:max(14px,env(safe-area-inset-right,14px));z-index:30;display:flex;flex-direction:column;align-items:flex-end;gap:5px">
   <div id="remote-status" style="font-size:9px;color:rgba(255,255,255,.35);letter-spacing:1px;text-align:right">Remote</div>
   <button id="remote-btn" style="padding:8px 14px;border-radius:8px;font-family:inherit;font-size:11px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;border:1px solid rgba(0,229,255,.4);background:rgba(0,229,255,.1);color:#00e5ff;transition:all .15s">📡 Connect Remote</button>
@@ -1526,6 +1533,123 @@ remoteBtn.onclick = async () => {
   remoteBtn.textContent = '📡 Connect Remote';
 };
 document.getElementById('qr-close').onclick = () => qrOverlay.style.display = 'none';
+
+// ═══════════════════════════════════════════════════
+//  AUTO-DISCOVER GAME LAUNCHER
+// ═══════════════════════════════════════════════════
+const REPO = 'maciek11123/Kid-Games';
+const SKIP = /^(magic-wall|index|remote|server)\w*\.html$/i;
+const EMOJI = { blobz:'🔵', capy:'🐾', pusheen:'🐱', squishy:'🧸', sea:'🌊', char:'🎭', bluey:'🐶' };
+
+function gameEmoji(name) {
+  const n = name.toLowerCase();
+  for (const [k,v] of Object.entries(EMOJI)) if (n.includes(k)) return v;
+  return '🎮';
+}
+
+async function discoverGames() {
+  try {
+    const r = await fetch(`https://api.github.com/repos/${REPO}/contents/`);
+    const files = await r.json();
+    const games = files.filter(f => f.name.endsWith('.html') && !SKIP.test(f.name));
+    buildDock(games);
+  } catch(e) { console.warn('Game discovery failed', e); }
+}
+
+function buildDock(games) {
+  const dock = document.getElementById('gdock');
+  dock.innerHTML = '';
+  games.forEach(g => {
+    const btn = document.createElement('button');
+    btn.textContent = gameEmoji(g.name) + ' ' + g.name.replace(/\.html$/i,'').replace(/[-_]/g,' ');
+    btn.style.cssText = 'padding:7px 12px;border-radius:8px;font-family:inherit;font-size:10px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.6);color:rgba(255,255,255,.8);white-space:nowrap;transition:all .15s';
+    btn.onclick = () => launchGame(g.name);
+    dock.appendChild(btn);
+  });
+  if (games.length) dock.style.display = 'flex';
+}
+
+// ── iframe launcher ──
+const gw = document.getElementById('gw');
+const gf = document.getElementById('gf');
+const gb = document.getElementById('gb');
+let activeGame = null;
+let gamePoseTimer = null, gamePoseRunning = false;
+const gpTimers = {};
+
+function launchGame(filename) {
+  activeGame = filename;
+  gf.src = filename;
+  gw.style.display = 'block';
+  gb.style.display = 'block';
+  startGamePose();
+}
+function closeGame() {
+  stopGamePose();
+  gw.style.display = 'none';
+  gb.style.display = 'none';
+  gf.src = '';
+  activeGame = null;
+}
+gb.onclick = closeGame;
+
+function sendToGame(data) {
+  if (!gf.contentWindow) return;
+  try { gf.contentWindow.postMessage(data, '*'); } catch(e) {}
+}
+
+// ── skeleton pointer loop ──
+const GAME_KPS = [
+  {idx:9,  id:'lw'}, {idx:10, id:'rw'},
+  {idx:15, id:'la'}, {idx:16, id:'ra'},
+];
+
+async function startGamePose() {
+  if (gamePoseRunning) return;
+  gamePoseRunning = true;
+  try { await ensurePose(); } catch(e) { gamePoseRunning = false; return; }
+
+  async function loop() {
+    if (!gamePoseRunning) return;
+    if (camReady && !videoElement.paused && videoElement.readyState >= 2) {
+      const frame = rotatedFrame();
+      if (frame && !poseBusy) {
+        poseBusy = true;
+        try {
+          const poses = await poseDetector.estimatePoses(frame);
+          if (activeGame && poses) {
+            const dim = srcDims();
+            poses.slice(0,6).forEach((pose, pi) => {
+              if ((pose.score||1) < 0.15) return;
+              GAME_KPS.forEach(({idx, id}) => {
+                const kp = pose.keypoints[idx];
+                if (!kp || kp.score < 0.2) return;
+                const x = mirrorX ? 1 - kp.x/dim.w : kp.x/dim.w;
+                const y = kp.y/dim.h;
+                const ptId = `skel-${pi}-${id}`;
+                sendToGame({type:'pointer', id:ptId, x, y});
+                clearTimeout(gpTimers[ptId]);
+                gpTimers[ptId] = setTimeout(() => sendToGame({type:'pointer-up', id:ptId}), 200);
+              });
+            });
+          }
+        } catch(e) {}
+        poseBusy = false;
+      }
+    }
+    gamePoseTimer = setTimeout(loop, 50);
+  }
+  loop();
+}
+
+function stopGamePose() {
+  gamePoseRunning = false;
+  clearTimeout(gamePoseTimer);
+  Object.keys(gpTimers).forEach(id => { clearTimeout(gpTimers[id]); sendToGame({type:'pointer-up', id}); });
+}
+
+// Discover games on load
+discoverGames();
 
 // BOOT
 renderer.setClearColor(new THREE.Color(0.02,0.02,0.03),1);
