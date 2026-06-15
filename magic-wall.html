@@ -327,6 +327,7 @@ currentRes=store.get('quality','med');
 resMult={low:.3,med:1,high:2}[currentRes];
 holoEnabled=store.get('holo',true);
 autoHide=store.get('autohide',false);
+trackingBack=store.get('trackingBack',true); // default ON — projector is behind players
 
 // gesture state (hands)
 let gesture={count:0,fist:false,h1:null,h2:null,hands:[]};
@@ -1517,6 +1518,7 @@ setInterval(() => {
       mode: currentMode, category: currentCategory,
       rotation: camRotation, mirror: mirrorX,
       quality: currentRes, holo: holoEnabled,
+      trackingBack,
       handCount: gesture.count, peopleCount: people.length,
       fps: Math.round(frameCount > 0 ? trackFps || 0 : 0),
     });
@@ -1531,6 +1533,7 @@ function handleRemoteCommand(msg) {
     case 'set-quality':   setRes(msg.value); break;
     case 'set-holo':      holoEnabled = msg.value; $('sw-holo').classList.toggle('on', holoEnabled); store.set('holo', holoEnabled); break;
     case 'set-facing':    startCam({facing: msg.value}); break;
+    case 'set-back':      trackingBack = msg.value; store.set('trackingBack', trackingBack); break;
     case 'set-skeleton':  showSkeleton = msg.value; $('btn-skel').classList.toggle('active', showSkeleton); break;
     case 'set-autovisit': autoVisit = msg.value; $('btn-autovisit').classList.toggle('active', autoVisit); break;
     case 'set-mode':      setMode(msg.mode, msg.category); break;
@@ -1616,6 +1619,8 @@ function sendToGame(data) {
   try { gf.contentWindow.postMessage(data, '*'); } catch(e) {}
 }
 
+let trackingBack = false; // true = camera behind people, swap L/R
+
 // ── skeleton pointer loop ──
 const GAME_KPS = [
   {idx:9,  id:'lw'}, {idx:10, id:'rw'},
@@ -1642,8 +1647,12 @@ async function startGamePose() {
             poses.slice(0,6).forEach((pose, pi) => {
               if ((pose.score||1) < 0.15) return;
               GAME_KPS.forEach(({idx, id}) => {
-                const kp = pose.keypoints[idx];
-                if (!kp || kp.score < 0.2) return;
+                // when tracking from behind, swap left(9/15) ↔ right(10/16)
+                const swappedIdx = trackingBack
+                  ? (idx===9?10 : idx===10?9 : idx===15?16 : idx===16?15 : idx)
+                  : idx;
+                const kp = pose.keypoints[swappedIdx];
+                if (!kp || kp.score < 0.15) return;
                 const x = mirrorX ? 1 - kp.x/dim.w : kp.x/dim.w;
                 const y = kp.y/dim.h;
                 const ptId = `skel-${pi}-${id}`;
