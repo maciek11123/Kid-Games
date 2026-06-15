@@ -5,9 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Magic Wall — Bluey Mirror · Worlds · Games</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700&family=Orbitron:wght@500;700;900&family=Baloo+2:wght@600;800&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}
@@ -447,134 +444,60 @@ function setMirror(on,lock=true){
 }
 
 // ═══════════════════════════════════════════════════
-//  ENGINE LOADERS — MediaPipe Holistic (single model)
+//  ENGINE LOADERS (lazy)
 // ═══════════════════════════════════════════════════
 function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.crossOrigin='anonymous';s.onload=res;s.onerror=()=>rej(new Error('load fail '+src));document.head.appendChild(s)})}
 
-// ── Homography calibration ──
-let hwH=null, hwCalibrated=false, hwSrcCorners=[];
-const HW_LABELS=['TOP-LEFT','TOP-RIGHT','BOTTOM-RIGHT','BOTTOM-LEFT'];
-const HW_COLORS=['#ff4444','#44ff44','#4488ff','#ffaa00'];
-let hwCalStep=0, hwCalActive=false;
-
-function hwComputeH(src,dst){
-  const A=[],b=[];
-  for(let i=0;i<4;i++){
-    const[sx,sy]=src[i],[dx,dy]=dst[i];
-    A.push([sx,sy,1,0,0,0,-dx*sx,-dx*sy]);A.push([0,0,0,sx,sy,1,-dy*sx,-dy*sy]);
-    b.push(dx);b.push(dy);
-  }
-  const n=8,M=A.map((row,i)=>[...row,b[i]]);
-  for(let col=0;col<n;col++){
-    let mr=col;
-    for(let r=col+1;r<n;r++)if(Math.abs(M[r][col])>Math.abs(M[mr][col]))mr=r;
-    [M[col],M[mr]]=[M[mr],M[col]];
-    for(let r=col+1;r<n;r++){const f=M[r][col]/M[col][col];for(let j=col;j<=n;j++)M[r][j]-=f*M[col][j];}
-  }
-  const h=new Array(n);
-  for(let i=n-1;i>=0;i--){h[i]=M[i][n]/M[i][i];for(let j=i+1;j<n;j++)h[i]-=M[i][j]*h[j]/M[i][i];}
-  return[[h[0],h[1],h[2]],[h[3],h[4],h[5]],[h[6],h[7],1]];
-}
-function hwApply(H,x,y){
-  const w=H[2][0]*x+H[2][1]*y+H[2][2];
-  return[Math.max(0,Math.min(1,(H[0][0]*x+H[0][1]*y+H[0][2])/w)),
-         Math.max(0,Math.min(1,(H[1][0]*x+H[1][1]*y+H[1][2])/w))];
-}
-function hwMap(lm){
-  if(!hwCalibrated||!hwH)return{x:lm.x,y:lm.y};
-  const[nx,ny]=hwApply(hwH,lm.x*videoElement.videoWidth,lm.y*videoElement.videoHeight);
-  return{x:nx,y:ny};
-}
-function hwSave(){
-  try{localStorage.setItem('mw_hw_cal',JSON.stringify({s:hwSrcCorners,H:hwH}));}catch(e){}
-}
-function hwLoad(){
-  try{
-    const d=JSON.parse(localStorage.getItem('mw_hw_cal'));
-    if(d&&d.H){hwSrcCorners=d.s;hwH=d.H;hwCalibrated=true;
-      statusEl.textContent='Cal restored';
-    }
-  }catch(e){}
+let hands=null,handsLoading=null;
+async function ensureHands(){
+  if(hands)return hands;
+  if(handsLoading)return handsLoading;
+  handsLoading=(async()=>{
+    statusEl.textContent='Loading hands…';statusEl.className='badge b-status loading';
+    await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js');
+    hands=new Hands({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+    hands.setOptions({maxNumHands:2,modelComplexity:1,minDetectionConfidence:0.65,minTrackingConfidence:0.6});
+    hands.onResults(onHandsResults);
+    return hands;
+  })();
+  return handsLoading;
 }
 
-// ── Holistic instance ──
-let holistic=null,holisticReady=false,holisticBusy=false;
-// Compatibility stubs so old callers still work
-let hands={send:async()=>{}},handsLoading=null;
-let poseDetector={estimatePoses:async()=>[]},poseLoading=null;
-async function ensureHands(){await ensureHolistic();return hands;}
-async function ensurePose(){await ensureHolistic();return poseDetector;}
-
-async function ensureHolistic(){
-  if(holisticReady)return;
-  if(holistic)return new Promise(res=>{const t=setInterval(()=>{if(holisticReady){clearInterval(t);res();}},100);});
-  statusEl.textContent='Loading tracker…';statusEl.className='badge b-status loading';
-  holistic=new Holistic({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${f}`});
-  holistic.setOptions({modelComplexity:1,smoothLandmarks:true,enableSegmentation:false,
-    refineFaceLandmarks:false,minDetectionConfidence:0.5,minTrackingConfidence:0.5});
-  holistic.onResults(onHolisticResults);
-  await holistic.initialize();
-  holisticReady=true;
-  statusEl.textContent='Tracker ready';statusEl.className='badge b-status';
-}
-
-// ── Bridge: Holistic → onHandsResults format ──
-function onHolisticResults(r){
-  holisticBusy=false;tickTrackFps();
-
-  // Build multiHandLandmarks / multiHandedness for onHandsResults
-  const mlm=[], mhe=[];
-  if(r.leftHandLandmarks){mlm.push(r.leftHandLandmarks);mhe.push({label:'Left',score:1});}
-  if(r.rightHandLandmarks){mlm.push(r.rightHandLandmarks);mhe.push({label:'Right',score:1});}
-  onHandsResults({multiHandLandmarks:mlm,multiHandedness:mhe});
-
-  // Bridge: Holistic → onPoses format (MoveNet-compatible keypoint array)
-  if(r.poseLandmarks){
-    // Map Holistic indices → MoveNet COCO order
-    const HL=[0,2,5,7,8,11,12,13,14,15,16,23,24,25,26,27,28];
-    const kps=HL.map((hi,ci)=>{
-      const lm=r.poseLandmarks[hi];
-      const mapped=hwMap(lm);
-      return{x:mapped.x*(videoElement.videoWidth||1280),
-             y:mapped.y*(videoElement.videoHeight||720),
-             score:lm.visibility??0.9,name:ci};
-    });
-    onPoses([{score:0.9,keypoints:kps}]);
-  }else{
-    onPoses([]);
-  }
-
-  // Game skeleton: send calibrated wrist/ankle points directly
-  if(activeGame&&r.poseLandmarks){
-    const vw=videoElement.videoWidth||1280,vh=videoElement.videoHeight||720;
-    const GAME_HL=[{hi:15,id:'lw'},{hi:16,id:'rw'},{hi:27,id:'la'},{hi:28,id:'ra'}];
-    GAME_HL.forEach(({hi,id},pi)=>{
-      const lm=r.poseLandmarks[hi];if(!lm||lm.visibility<0.2)return;
-      const mapped=hwMap(lm);
-      const x=mirrorX?1-mapped.x:mapped.x;
-      const ptId=`skel-0-${id}`;
-      sendToGame({type:'pointer',id:ptId,x,y:mapped.y});
-      clearTimeout(gpTimers[ptId]);
-      gpTimers[ptId]=setTimeout(()=>sendToGame({type:'pointer-up',id:ptId}),200);
-    });
-  }
+let poseDetector=null,poseLoading=null;
+async function ensurePose(){
+  if(poseDetector)return poseDetector;
+  if(poseLoading)return poseLoading;
+  poseLoading=(async()=>{
+    statusEl.textContent='Loading body tracking…';statusEl.className='badge b-status loading';
+    if(!window.tf)await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js');
+    if(!window.poseDetection)await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js');
+    await tf.setBackend('webgl');await tf.ready();
+    poseDetector=await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet,
+      {modelType:poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING,enableSmoothing:true});
+    return poseDetector;
+  })();
+  return poseLoading;
 }
 
 // ═══════════════════════════════════════════════════
-//  SHARED PROCESS LOOP — Holistic drives everything
+//  SHARED PROCESS LOOP — feeds the engine for the active mode
 // ═══════════════════════════════════════════════════
 let handsBusy=false,poseBusy=false,calibrating=false;
 async function processLoop(){
   if(!isProcessing)return;
   if(camReady&&!videoElement.paused&&!videoElement.ended&&videoElement.readyState>=2&&videoElement.currentTime!==lastVideoTime&&!calibrating){
     lastVideoTime=videoElement.currentTime;
-    if(holisticReady&&!holisticBusy){
-      holisticBusy=true;
-      const frame=rotatedFrame();
-      if(frame)try{await holistic.send({image:frame})}catch(e){holisticBusy=false;}
-    } else if(!holisticReady){
-      // Boot holistic on first frame once camera is live
-      ensureHolistic().catch(()=>{});
+    const frame=rotatedFrame();
+    if(frame){
+      if((currentCategory==='world'||currentCategory==='game')&&hands&&!handsBusy){
+        handsBusy=true;
+        try{await hands.send({image:frame})}catch(e){}
+        handsBusy=false;tickTrackFps();
+      }else if(currentCategory==='bluey'&&poseDetector&&!poseBusy){
+        poseBusy=true;
+        try{const poses=await poseDetector.estimatePoses(frame);onPoses(poses)}catch(e){}
+        poseBusy=false;tickTrackFps();
+      }
     }
   }
   requestAnimationFrame(processLoop);
@@ -658,72 +581,14 @@ function showCalibStep(i){
 }
 
 async function openCalibration(){
-  // 4-corner projector homography calibration
-  hwCalActive=true; hwCalStep=0; hwSrcCorners=[];
-  hwCalibrated=false;
-  statusEl.textContent='Calibrate: click corners';statusEl.className='badge b-status loading';
-  // Show overlay canvas on top of everything
-  const oc=document.getElementById('cal-hw-overlay');
-  if(!oc){
-    const overlay=document.createElement('canvas');
-    overlay.id='cal-hw-overlay';
-    overlay.style.cssText='position:fixed;inset:0;width:100%;height:100%;z-index:999;cursor:crosshair';
-    overlay.width=window.innerWidth*(window.devicePixelRatio||1);
-    overlay.height=window.innerHeight*(window.devicePixelRatio||1);
-    overlay.style.width='100vw';overlay.style.height='100vh';
-    document.body.appendChild(overlay);
-    const octx=overlay.getContext('2d');
-    function hwDrawOverlay(){
-      const W=overlay.width,H=overlay.height;
-      octx.clearRect(0,0,W,H);
-      octx.fillStyle='rgba(0,0,0,0.4)';octx.fillRect(0,0,W,H);
-      // Pulsing hint for next corner
-      if(hwCalStep<4){
-        const hints=[[W*0.05,H*0.05],[W*0.95,H*0.05],[W*0.95,H*0.95],[W*0.05,H*0.95]];
-        const[hx,hy]=hints[hwCalStep];
-        const t=(Date.now()%1200)/1200,r=18+t*16,a=(1-t)*0.7;
-        octx.beginPath();octx.arc(hx,hy,r,0,Math.PI*2);
-        octx.strokeStyle=`rgba(251,191,36,${a})`;octx.lineWidth=2;octx.stroke();
-        octx.beginPath();octx.arc(hx,hy,7,0,Math.PI*2);
-        octx.fillStyle=HW_COLORS[hwCalStep];octx.fill();
-        octx.fillStyle='#fff';octx.font='bold 12px monospace';octx.textAlign='center';
-        octx.fillText(HW_LABELS[hwCalStep],hx,hy-22);
-        octx.fillStyle='rgba(255,255,255,0.85)';octx.font='14px monospace';octx.textAlign='center';
-        octx.fillText(`Click corner ${hwCalStep+1}/4: ${HW_LABELS[hwCalStep]}`,W/2,H/2);
-      }
-      // Already placed corners
-      hwSrcCorners.forEach((c,i)=>{
-        const sx=c[0]/videoElement.videoWidth*W*(1/window.devicePixelRatio||1);
-        const sy=c[1]/videoElement.videoHeight*H*(1/window.devicePixelRatio||1);
-        octx.beginPath();octx.arc(sx*(window.devicePixelRatio||1),sy*(window.devicePixelRatio||1),8,0,Math.PI*2);
-        octx.fillStyle=HW_COLORS[i]+'99';octx.fill();
-        octx.strokeStyle=HW_COLORS[i];octx.lineWidth=2;octx.stroke();
-        octx.fillStyle=HW_COLORS[i];octx.font='bold 10px monospace';octx.textAlign='center';
-        octx.fillText(HW_LABELS[i],sx*(window.devicePixelRatio||1),sy*(window.devicePixelRatio||1)-14);
-      });
-      if(hwCalStep<4)requestAnimationFrame(hwDrawOverlay);
-    }
-    hwDrawOverlay();
-    overlay.addEventListener('click',e=>{
-      if(!hwCalActive||hwCalStep>=4)return;
-      const dpr=window.devicePixelRatio||1;
-      const rect=overlay.getBoundingClientRect();
-      const cx=(e.clientX-rect.left)/rect.width;
-      const cy=(e.clientY-rect.top)/rect.height;
-      const vx=mirrorX?(1-cx)*videoElement.videoWidth:cx*videoElement.videoWidth;
-      const vy=cy*videoElement.videoHeight;
-      hwSrcCorners.push([vx,vy]);
-      hwCalStep++;
-      if(hwCalStep===4){
-        const dst=[[0,0],[1,0],[1,1],[0,1]];
-        hwH=hwComputeH(hwSrcCorners,dst);
-        hwCalibrated=true;hwCalActive=false;hwSave();
-        statusEl.textContent='✓ Calibrated';statusEl.className='badge b-status';
-        setTimeout(()=>{overlay.remove();},1500);
-      }
-    });
-  }
-  calibLivePreview&&calibLivePreview(false);
+  calibEl.classList.add('show');
+  calibrating=true;
+  showCalibStep(0);
+  calibResult.textContent='Loading body tracking…';
+  try{await ensurePose();calibResult.textContent='';statusEl.textContent='Calibrating';statusEl.className='badge b-status loading';}
+  catch(e){calibResult.textContent='Could not load tracking — check internet.';}
+  cancelAnimationFrame(calibPreviewRAF);
+  calibLivePreview(true);
 }
 function closeCalibration(){
   calibEl.classList.remove('show');
@@ -1597,6 +1462,7 @@ function startRemoteStream(conn) {
   const stream = streamCanvas.captureStream(15);
   try { peer.call(conn.peer, stream); } catch(e) {}
   streamInterval = setInterval(() => {
+    if (!remoteConn) return; // skip if nobody watching
     if (!remoteConn) return;
     sCtx.fillStyle = '#050508';
     sCtx.fillRect(0, 0, 640, 360);
@@ -1717,6 +1583,7 @@ function launchGame(filename) {
   gf.src = filename;
   gw.style.display = 'block';
   gb.style.display = 'block';
+  showUI(false); // hide wall UI to free up repaints
   startGamePose();
 }
 function closeGame() {
@@ -1725,6 +1592,7 @@ function closeGame() {
   gb.style.display = 'none';
   gf.src = '';
   activeGame = null;
+  pokeIdle(); // restore UI
 }
 gb.onclick = closeGame;
 
@@ -1740,10 +1608,41 @@ const GAME_KPS = [
 ];
 
 async function startGamePose() {
-  // Game skeleton is now driven by onHolisticResults — no separate loop needed
   if (gamePoseRunning) return;
   gamePoseRunning = true;
-  await ensureHolistic().catch(()=>{});
+  try { await ensurePose(); } catch(e) { gamePoseRunning = false; return; }
+
+  async function loop() {
+    if (!gamePoseRunning) return;
+    if (camReady && !videoElement.paused && videoElement.readyState >= 2) {
+      const frame = rotatedFrame();
+      if (frame && !poseBusy) {
+        poseBusy = true;
+        try {
+          const poses = await poseDetector.estimatePoses(frame);
+          if (activeGame && poses) {
+            const dim = srcDims();
+            poses.slice(0,6).forEach((pose, pi) => {
+              if ((pose.score||1) < 0.15) return;
+              GAME_KPS.forEach(({idx, id}) => {
+                const kp = pose.keypoints[idx];
+                if (!kp || kp.score < 0.2) return;
+                const x = mirrorX ? 1 - kp.x/dim.w : kp.x/dim.w;
+                const y = kp.y/dim.h;
+                const ptId = `skel-${pi}-${id}`;
+                sendToGame({type:'pointer', id:ptId, x, y});
+                clearTimeout(gpTimers[ptId]);
+                gpTimers[ptId] = setTimeout(() => sendToGame({type:'pointer-up', id:ptId}), 200);
+              });
+            });
+          }
+        } catch(e) {}
+        poseBusy = false;
+      }
+    }
+    gamePoseTimer = setTimeout(loop, activeGame ? 50 : 100);
+  }
+  loop();
 }
 
 function stopGamePose() {
@@ -1755,7 +1654,6 @@ function stopGamePose() {
 // Discover games on load
 discoverGames();
 
-hwLoad(); // restore homography calibration
 // BOOT
 renderer.setClearColor(new THREE.Color(0.02,0.02,0.03),1);
 animate();
