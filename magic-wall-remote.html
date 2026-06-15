@@ -78,7 +78,6 @@ html,body{height:100%;background:var(--ink);color:#fff;font-family:'JetBrains Mo
     <div class="tab on" data-tab="detect">👁 Detect</div>
     <div class="tab" data-tab="cam">📷 Camera</div>
     <div class="tab" data-tab="wall">🌌 Wall</div>
-    <div class="tab" data-tab="cal">🎯 Cal</div>
   </div>
   <div id="panels">
 
@@ -104,6 +103,13 @@ html,body{height:100%;background:var(--ink);color:#fff;font-family:'JetBrains Mo
     <!-- CAMERA -->
     <div class="page" id="tab-cam">
       <div class="sec">
+        <div class="sec-title">Camera source</div>
+        <div class="seg">
+          <div class="sb" id="btn-face-front" data-facing="user">📱 Front / Selfie</div>
+          <div class="sb" id="btn-face-back" data-facing="environment">🎥 Back / Room</div>
+        </div>
+      </div>
+      <div class="sec">
         <div class="sec-title">Orientation</div>
         <div class="seg">
           <div class="sb on" data-rot="0">0°</div>
@@ -116,26 +122,7 @@ html,body{height:100%;background:var(--ink);color:#fff;font-family:'JetBrains Mo
         <div class="sec-title">Image</div>
         <label class="row">Mirror <div class="sw" id="sw-mirror"></div></label>
       </div>
-    </div>
-
-    <!-- CALIBRATION -->
-    <div class="page" id="tab-cal">
-      <div class="sec">
-        <div class="sec-title">Projector calibration</div>
-        <p style="font-size:10px;color:rgba(255,255,255,0.5);line-height:1.6;margin-bottom:4px">
-          4-corner homography: click TL→TR→BR→BL on the projected image corners. Fixes skew, keystone, and offset. Saved across sessions.
-        </p>
-        <div id="cal-status-remote" style="font-size:10px;color:#fbbf24;letter-spacing:1px;margin-bottom:8px">Status: unknown</div>
-        <button class="act" id="btn-start-cal">🎯 Start corner calibration</button>
-      </div>
-      <div class="sec">
-        <div class="sec-title">Auto-calibration</div>
-        <button class="act" id="btn-auto-cal">⚡ Auto-calibrate (orientation)</button>
-      </div>
-      <div class="sec">
-        <div class="sec-title">Reset</div>
-        <button class="act" style="color:var(--coral);border-color:rgba(255,100,100,0.3)" id="btn-reset-cal">✕ Reset calibration</button>
-      </div>
+      <button class="act" id="btn-calibrate-cam">🎯 Auto-calibrate</button>
     </div>
 
     <!-- WALL -->
@@ -145,7 +132,14 @@ html,body{height:100%;background:var(--ink);color:#fff;font-family:'JetBrains Mo
         <div class="seg">
           <div class="sb" data-mode="mirror" data-cat="bluey">🐶 Bluey</div>
           <div class="sb" data-mode="pond" data-cat="world">🌌 World</div>
-          <div class="sb" data-mode="bubbles" data-cat="game">🫧 Games</div>
+          <div class="sb" data-mode="bubbles" data-cat="game">🫧 Hand Games</div>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="sec-title">Hand games</div>
+        <div class="seg">
+          <div class="sb" data-mode="bubbles" data-cat="game">🫧 Bubbles</div>
+          <div class="sb" data-mode="fruits" data-cat="game">🍉 Fruits</div>
         </div>
       </div>
       <div class="sec">
@@ -159,13 +153,6 @@ html,body{height:100%;background:var(--ink);color:#fff;font-family:'JetBrains Mo
           <div class="sb" data-mode="shatter" data-cat="world">Shatter</div>
           <div class="sb" data-mode="earth" data-cat="world">Earth</div>
           <div class="sb" data-mode="alien" data-cat="world">Alien</div>
-        </div>
-      </div>
-      <div class="sec">
-        <div class="sec-title">Hand games</div>
-        <div class="seg">
-          <div class="sb" data-mode="bubbles" data-cat="game">🫧 Bubbles</div>
-          <div class="sb" data-mode="fruits" data-cat="game">🍉 Fruits</div>
         </div>
       </div>
       <button class="act" id="btn-home">⌂ Go Home</button>
@@ -271,20 +258,9 @@ mkSwitch('sw-holo', 'set-holo');
 mkSwitch('sw-skel', 'set-skeleton');
 mkSwitch('sw-autovisit', 'set-autovisit');
 
+document.querySelectorAll('[data-facing]').forEach(b => b.onclick = () => send({ type: 'set-facing', value: b.dataset.facing }));
+$('btn-calibrate-cam').onclick = () => send({ type: 'calibrate' });
 $('btn-calibrate').onclick = () => send({ type: 'calibrate' });
-$('btn-start-cal').onclick = () => { send({ type: 'calibrate' }); $('cal-status-remote').textContent = 'Status: calibrating — click corners on wall'; };
-$('btn-auto-cal').onclick = () => send({ type: 'calibrate' });
-$('btn-reset-cal').onclick = () => { send({ type: 'reset-cal' }); $('cal-status-remote').textContent = 'Status: reset'; };
-
-// Show calibration status from wall state
-const _origHandleState = handleState;
-function handleState(msg) {
-  _origHandleState(msg);
-  if (msg.calStatus !== undefined) {
-    $('cal-status-remote').textContent = msg.calStatus ? 'Status: ✓ calibrated' : 'Status: uncalibrated';
-    $('cal-status-remote').style.color = msg.calStatus ? '#50fa7b' : '#fbbf24';
-  }
-}
 $('btn-home').onclick = () => send({ type: 'go-home' });
 </script>
 </body>
