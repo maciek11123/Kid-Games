@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Magic Wall Remote</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700&family=Orbitron:wght@700;900&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{--cyan:#00e5ff;--grass:#50fa7b;--coral:#FF6B6B;--ink:#050508;--glass:rgba(8,10,20,.88);--line:rgba(255,255,255,.09)}
+html,body{height:100%;background:var(--ink);color:#fff;font-family:'JetBrains Mono',monospace;overflow:hidden;user-select:none;touch-action:manipulation}
+
+#connect{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:24px;transition:opacity .3s}
+#connect.gone{opacity:0;pointer-events:none}
+#connect h1{font-family:'Orbitron',sans-serif;font-size:clamp(20px,5vw,32px);letter-spacing:4px;background:linear-gradient(110deg,#5BC0EB,#00e5ff);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+#connect p{font-size:11px;color:rgba(255,255,255,.4);letter-spacing:1px;text-align:center;line-height:1.8;max-width:280px}
+#room-input{background:rgba(255,255,255,.06);border:1px solid rgba(0,229,255,.25);color:#fff;padding:12px 16px;border-radius:10px;font-family:'JetBrains Mono',monospace;font-size:16px;letter-spacing:3px;text-align:center;outline:none;width:230px}
+#room-input::placeholder{color:rgba(255,255,255,.2)}
+#connect-btn{padding:12px 32px;border-radius:99px;font-family:inherit;font-size:11px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;border:1px solid rgba(0,229,255,.4);background:rgba(0,229,255,.12);color:var(--cyan);transition:all .15s}
+#connect-error{font-size:10px;color:var(--coral);min-height:14px;letter-spacing:1px}
+
+#app{position:fixed;inset:0;display:flex;flex-direction:column;opacity:0;pointer-events:none;transition:opacity .3s}
+#app.on{opacity:1;pointer-events:auto}
+
+/* feed */
+#feed{position:relative;width:100%;background:#000;flex-shrink:0}
+#feed video{width:100%;height:100%;object-fit:cover;display:block;max-height:38vw}
+#feed-info{position:absolute;top:6px;left:8px;font-size:9px;color:rgba(0,229,255,.7);letter-spacing:1px;background:rgba(0,0,0,.5);padding:3px 8px;border-radius:5px;line-height:1.6}
+#conn-dot{position:absolute;top:8px;right:10px;font-size:9px;padding:3px 8px;border-radius:99px;background:rgba(80,250,123,.12);color:var(--grass);border:1px solid rgba(80,250,123,.3);letter-spacing:1px}
+
+/* tabs */
+#tabs{display:flex;border-bottom:1px solid var(--line);flex-shrink:0}
+.tab{flex:1;padding:10px 4px;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,.4);text-align:center;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+.tab.on{color:var(--cyan);border-bottom-color:var(--cyan)}
+
+/* panels */
+#panels{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.page{display:none;padding:12px 14px;flex-direction:column;gap:10px}
+.page.on{display:flex}
+.sec{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.sec-title{font-size:8px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.3);margin-bottom:2px}
+.row{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:rgba(255,255,255,.7);gap:8px}
+.seg{display:flex;gap:4px;flex-wrap:wrap}
+.sb{flex:1;min-width:0;padding:8px 4px;border-radius:7px;font-family:inherit;font-size:9px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;border:1px solid var(--line);background:transparent;color:rgba(255,255,255,.45);transition:all .12s;text-align:center}
+.sb.on{background:rgba(0,229,255,.14);color:var(--cyan);border-color:rgba(0,229,255,.4)}
+.sb.g-on{background:rgba(80,250,123,.12);color:var(--grass);border-color:rgba(80,250,123,.4)}
+.sb.b-on{background:rgba(91,192,235,.14);color:#5BC0EB;border-color:rgba(91,192,235,.4)}
+.sw{position:relative;width:44px;height:24px;border-radius:99px;background:rgba(255,255,255,.12);cursor:pointer;transition:background .2s;flex-shrink:0}
+.sw::after{content:'';position:absolute;top:4px;left:4px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .2s}
+.sw.on{background:rgba(0,229,255,.5)}
+.sw.on::after{left:24px}
+.act{padding:13px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:rgba(255,255,255,.65);font-family:inherit;font-size:11px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;text-align:center;width:100%;transition:background .12s}
+.act:active{background:rgba(255,255,255,.1)}
+
+#bar{padding:6px 14px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);flex-shrink:0;font-size:9px;color:rgba(255,255,255,.3);letter-spacing:1px}
+#disc{font-size:9px;padding:4px 10px;border-radius:6px;border:1px solid rgba(255,100,100,.3);background:transparent;color:var(--coral);cursor:pointer;font-family:inherit;letter-spacing:1px}
+</style>
+</head>
+<body>
+
+<!-- CONNECT -->
+<div id="connect">
+  <h1>MAGIC WALL</h1>
+  <p>Enter the room ID shown on the wall, or scan the QR code to auto-fill.</p>
+  <input id="room-input" type="text" placeholder="mw-xxxxxx" autocomplete="off" autocorrect="off" spellcheck="false">
+  <button id="connect-btn">Connect</button>
+  <div id="connect-error"></div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div id="feed">
+    <video id="feed-video" autoplay playsinline muted></video>
+    <div id="feed-info">— fps · — hands · — people</div>
+    <div id="conn-dot">🟢 Live</div>
+  </div>
+  <div id="tabs">
+    <div class="tab on" data-tab="detect">👁 Detect</div>
+    <div class="tab" data-tab="cam">📷 Camera</div>
+    <div class="tab" data-tab="wall">🌌 Wall</div>
+  </div>
+  <div id="panels">
+
+    <!-- DETECT -->
+    <div class="page on" id="tab-detect">
+      <div class="sec">
+        <div class="sec-title">Tracking options</div>
+        <label class="row">Skeleton overlay <div class="sw on" id="sw-skel"></div></label>
+        <label class="row">Surprise visits <div class="sw on" id="sw-autovisit"></div></label>
+        <label class="row">Holo hands <div class="sw on" id="sw-holo"></div></label>
+      </div>
+      <div class="sec">
+        <div class="sec-title">Quality</div>
+        <div class="seg">
+          <div class="sb" data-quality="low">Low</div>
+          <div class="sb on" data-quality="med">Med</div>
+          <div class="sb" data-quality="high">High</div>
+        </div>
+      </div>
+      <button class="act" id="btn-calibrate">🎯 Auto-calibrate</button>
+    </div>
+
+    <!-- CAMERA -->
+    <div class="page" id="tab-cam">
+      <div class="sec">
+        <div class="sec-title">Orientation</div>
+        <div class="seg">
+          <div class="sb on" data-rot="0">0°</div>
+          <div class="sb" data-rot="90">90°</div>
+          <div class="sb" data-rot="180">180°</div>
+          <div class="sb" data-rot="270">270°</div>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="sec-title">Image</div>
+        <label class="row">Mirror <div class="sw" id="sw-mirror"></div></label>
+      </div>
+    </div>
+
+    <!-- WALL -->
+    <div class="page" id="tab-wall">
+      <div class="sec">
+        <div class="sec-title">Mode</div>
+        <div class="seg">
+          <div class="sb" data-mode="mirror" data-cat="bluey">🐶 Bluey</div>
+          <div class="sb" data-mode="pond" data-cat="world">🌌 World</div>
+          <div class="sb" data-mode="bubbles" data-cat="game">🫧 Games</div>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="sec-title">Particle worlds</div>
+        <div class="seg">
+          <div class="sb" data-mode="pond" data-cat="world">Pond</div>
+          <div class="sb" data-mode="flow" data-cat="world">Flow</div>
+          <div class="sb" data-mode="flow2" data-cat="world">Flow 2</div>
+          <div class="sb" data-mode="nebula" data-cat="world">Nebula</div>
+          <div class="sb" data-mode="storm" data-cat="world">Storm</div>
+          <div class="sb" data-mode="shatter" data-cat="world">Shatter</div>
+          <div class="sb" data-mode="earth" data-cat="world">Earth</div>
+          <div class="sb" data-mode="alien" data-cat="world">Alien</div>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="sec-title">Hand games</div>
+        <div class="seg">
+          <div class="sb" data-mode="bubbles" data-cat="game">🫧 Bubbles</div>
+          <div class="sb" data-mode="fruits" data-cat="game">🍉 Fruits</div>
+        </div>
+      </div>
+      <button class="act" id="btn-home">⌂ Go Home</button>
+    </div>
+
+  </div>
+  <div id="bar">
+    <span id="room-label">—</span>
+    <button id="disc">Disconnect</button>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// Auto-fill from URL hash (QR code)
+const hash = location.hash.slice(1);
+if (hash) $('room-input').value = hash;
+
+// Tabs
+document.querySelectorAll('.tab').forEach(t => {
+  t.onclick = () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('on'));
+    document.querySelectorAll('.page').forEach(x => x.classList.remove('on'));
+    t.classList.add('on');
+    $('tab-' + t.dataset.tab).classList.add('on');
+  };
+});
+
+// PeerJS lazy load
+let peer = null, conn = null;
+function loadPeerJS() {
+  return new Promise((res, rej) => {
+    if (window.Peer) return res();
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
+    s.onload = res; s.onerror = rej;
+    document.head.appendChild(s);
+  });
+}
+
+function send(data) { if (conn && conn.open) try { conn.send(data); } catch(e) {} }
+
+function connect(roomId) {
+  $('connect-error').textContent = '';
+  $('connect-btn').textContent = 'Connecting…';
+  peer = new Peer(undefined, { debug: 0 });
+  peer.on('open', () => {
+    conn = peer.connect(roomId.trim(), { reliable: true });
+    conn.on('open', () => {
+      $('connect').classList.add('gone');
+      $('app').classList.add('on');
+      $('room-label').textContent = 'room: ' + roomId.trim();
+    });
+    conn.on('data', handleState);
+    conn.on('close', () => { $('conn-dot').textContent = '🔴 Off'; });
+    conn.on('error', () => { $('connect-error').textContent = 'Connection failed'; $('connect-btn').textContent = 'Connect'; });
+  });
+  peer.on('call', call => {
+    call.answer();
+    call.on('stream', stream => { $('feed-video').srcObject = stream; $('feed-video').play().catch(()=>{}); });
+  });
+  peer.on('error', () => { $('connect-error').textContent = 'Room not found'; $('connect-btn').textContent = 'Connect'; });
+}
+
+$('connect-btn').onclick = async () => {
+  $('connect-btn').textContent = 'Loading…';
+  try { await loadPeerJS(); } catch(e) { $('connect-error').textContent = 'Failed to load'; $('connect-btn').textContent = 'Connect'; return; }
+  connect($('room-input').value);
+};
+$('room-input').onkeydown = async e => { if (e.key === 'Enter') { await loadPeerJS().catch(()=>{}); connect($('room-input').value); } };
+
+$('disc').onclick = () => {
+  if (conn) conn.close();
+  if (peer) peer.destroy();
+  $('app').classList.remove('on');
+  $('connect').classList.remove('gone');
+  $('connect-btn').textContent = 'Connect';
+};
+
+// State sync from wall
+function handleState(msg) {
+  if (!msg || msg.type !== 'state') return;
+  $('feed-info').textContent = `${msg.fps||'—'} fps · ${msg.handCount||0} hands · ${msg.peopleCount||0} people`;
+  $('sw-mirror').classList.toggle('on', !!msg.mirror);
+  $('sw-holo').classList.toggle('on', !!msg.holo);
+  document.querySelectorAll('[data-quality]').forEach(b => b.classList.toggle('on', b.dataset.quality === msg.quality));
+  document.querySelectorAll('[data-rot]').forEach(b => b.classList.toggle('on', parseInt(b.dataset.rot) === msg.rotation));
+  document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === msg.mode));
+}
+
+// Controls
+document.querySelectorAll('[data-rot]').forEach(b => b.onclick = () => send({ type: 'set-rotation', value: parseInt(b.dataset.rot) }));
+document.querySelectorAll('[data-quality]').forEach(b => b.onclick = () => send({ type: 'set-quality', value: b.dataset.quality }));
+document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => send({ type: 'set-mode', mode: b.dataset.mode, category: b.dataset.cat }));
+
+function mkSwitch(id, type) {
+  const sw = $(id);
+  sw.onclick = () => { sw.classList.toggle('on'); send({ type, value: sw.classList.contains('on') }); };
+}
+mkSwitch('sw-mirror', 'set-mirror');
+mkSwitch('sw-holo', 'set-holo');
+mkSwitch('sw-skel', 'set-skeleton');
+mkSwitch('sw-autovisit', 'set-autovisit');
+
+$('btn-calibrate').onclick = () => send({ type: 'calibrate' });
+$('btn-home').onclick = () => send({ type: 'go-home' });
+</script>
+</body>
+</html>
