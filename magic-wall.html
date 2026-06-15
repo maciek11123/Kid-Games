@@ -903,6 +903,8 @@ function onHandsResults(results){
     statusEl.textContent='Searching…';statusEl.className='badge b-status loading';
     gestureHudEl.textContent='—';
     for(let i=0;i<2;i++){handSmooth[i].state='none';handSmooth[i].scanT=0;handSmooth[i].trails=[[],[],[],[],[]]}
+    // release all hand pointers from game
+    if(activeGame){for(let i=0;i<2;i++){const id=`hand-${i}`;sendToGame({type:'pointer-up',id});}}
     return;
   }
   statusEl.textContent='Tracking';statusEl.className='badge b-status';
@@ -926,6 +928,13 @@ function onHandsResults(results){
     const sm=handSmooth[i];
     if(state!==sm.state){sm.prevState=sm.state;sm.state=state;sm.stateTime=0;if(state!=='none')sm.scanT=0}
     else sm.stateTime+=33;
+    // pipe palm position directly to game — no separate detector needed
+    if(activeGame){
+      const id=`hand-${i}`;
+      sendToGame({type:'pointer',id,x:hx,y:hy});
+      clearTimeout(gpTimers[id]);
+      gpTimers[id]=setTimeout(()=>sendToGame({type:'pointer-up',id}),150);
+    }
   }
   for(let i=hc;i<2;i++){handSmooth[i].state='none';handSmooth[i].trails=[[],[],[],[],[]]}
   const labels=gesture.hands.filter(h=>h.state!=='none').map(h=>{const m=GESTURE_META[h.state]||{};return`${m.emoji||''} ${m.label||h.state}`});
@@ -1614,6 +1623,8 @@ const GAME_KPS = [
 
 async function startGamePose() {
   if (gamePoseRunning) return;
+  // In hand/game mode, onHandsResults already pipes to game — no extra loop needed
+  if (currentCategory === 'game' || currentCategory === 'world') return;
   gamePoseRunning = true;
   try { await ensurePose(); } catch(e) { gamePoseRunning = false; return; }
 
