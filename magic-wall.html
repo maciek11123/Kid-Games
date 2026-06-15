@@ -207,6 +207,7 @@ video#cam.cam-on{opacity:1}
   <div id="home-setup">
     <span class="cam-state" id="home-cam-state">Camera: <b>starting…</b></span>
     <button class="pill-btn" id="btn-calibrate-home">🎯 Auto-calibrate</button>
+    <button class="pill-btn" id="btn-remote-home" style="background:rgba(0,229,255,.12);border-color:rgba(0,229,255,.4);color:#00e5ff">📡 Remote</button>
     <button class="pill-btn ghost" id="btn-settings-home">Settings</button>
   </div>
 </div>
@@ -289,7 +290,7 @@ video#cam.cam-on{opacity:1}
   <div style="font-family:'Orbitron',sans-serif;font-size:16px;letter-spacing:3px;color:#00e5ff">CONNECT REMOTE</div>
   <div id="qr-box" style="background:#fff;padding:14px;border-radius:10px"></div>
   <div id="qr-room-id" style="font-size:12px;letter-spacing:4px;color:rgba(255,255,255,.5);font-family:'JetBrains Mono',monospace">—</div>
-  <div style="font-size:11px;color:rgba(255,255,255,.35);text-align:center;line-height:1.7">Scan with phone · or open:<br><span style="color:#00e5ff">maciek11123.github.io/Tracker/magic-wall-remote.html</span></div>
+  <div style="font-size:11px;color:rgba(255,255,255,.35);text-align:center;line-height:1.7">Scan with phone · or open:<br><span style="color:#00e5ff">maciek11123.github.io/Kid-Games/magic-wall-remote.html</span></div>
   <button id="qr-close" style="padding:9px 22px;border-radius:99px;font-family:inherit;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;border:1px solid rgba(255,255,255,.15);background:transparent;color:rgba(255,255,255,.5)">Close</button>
 </div>
 
@@ -1363,6 +1364,13 @@ $('btn-drawer-close').onclick=()=>$('drawer').classList.remove('open');
 $('btn-settings-home').onclick=()=>$('drawer').classList.add('open');
 $('btn-calibrate').onclick=()=>{$('drawer').classList.remove('open');openCalibration()};
 $('btn-calibrate-home').onclick=openCalibration;
+$('btn-remote-home').onclick=async()=>{
+  $('btn-remote-home').textContent='⏳ Loading…';
+  try{await loadPeerJS()}catch(e){$('btn-remote-home').textContent='📡 Remote';return}
+  if(!peer)initPeer();
+  qrOverlay.style.display='flex';
+  $('btn-remote-home').textContent='📡 Remote';
+};
 $('btn-face-front').onclick=()=>startCam({facing:'user'});
 $('btn-face-back').onclick=()=>startCam({facing:'environment'});
 document.querySelectorAll('.rot-btn').forEach(b=>b.onclick=()=>setRotation(parseInt(b.dataset.rot)));
@@ -1437,7 +1445,7 @@ function initPeer() {
   peer.on('open', id => {
     remoteStatus.textContent = id;
     document.getElementById('qr-room-id').textContent = id;
-    const url = `https://maciek11123.github.io/Tracker/magic-wall-remote.html#${id}`;
+    const url = `https://maciek11123.github.io/Kid-Games/magic-wall-remote.html#${id}`;
     const img = document.createElement('img');
     img.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
     img.width = img.height = 200;
@@ -1558,7 +1566,7 @@ document.getElementById('qr-close').onclick = () => qrOverlay.style.display = 'n
 //  AUTO-DISCOVER GAME LAUNCHER
 // ═══════════════════════════════════════════════════
 const REPO = 'maciek11123/Kid-Games';
-const SKIP = /^(magic-wall|index|remote|server)\w*\.html$/i;
+const SKIP = /^(magic-wall[\w-]*|index|remote|server)\.html$/i;
 const EMOJI = { blobz:'🔵', capy:'🐾', pusheen:'🐱', squishy:'🧸', sea:'🌊', char:'🎭', bluey:'🐶' };
 
 function gameEmoji(name) {
