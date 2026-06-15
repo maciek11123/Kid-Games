@@ -54,6 +54,11 @@ html,body{height:100%;background:var(--ink);color:#fff;font-family:'JetBrains Mo
 
 #bar{padding:6px 14px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);flex-shrink:0;font-size:9px;color:rgba(255,255,255,.3);letter-spacing:1px}
 #disc{font-size:9px;padding:4px 10px;border-radius:6px;border:1px solid rgba(255,100,100,.3);background:transparent;color:var(--coral);cursor:pointer;font-family:inherit;letter-spacing:1px}
+.gc{padding:14px 8px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.04);cursor:pointer;text-align:center;transition:all .15s;display:flex;flex-direction:column;gap:4px;align-items:center}
+.gc:active{background:rgba(0,229,255,.1);border-color:rgba(0,229,255,.4)}
+.gc.running{border-color:rgba(80,250,123,.5);background:rgba(80,250,123,.08)}
+.gc .em{font-size:26px}
+.gc .nm{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,.5)}
 </style>
 </head>
 <body>
@@ -75,14 +80,22 @@ html,body{height:100%;background:var(--ink);color:#fff;font-family:'JetBrains Mo
     <div id="conn-dot">🟢 Live</div>
   </div>
   <div id="tabs">
-    <div class="tab on" data-tab="detect">👁 Detect</div>
+    <div class="tab on" data-tab="games">🎮 Games</div>
+    <div class="tab" data-tab="detect">👁 Detect</div>
     <div class="tab" data-tab="cam">📷 Camera</div>
     <div class="tab" data-tab="wall">🌌 Wall</div>
   </div>
   <div id="panels">
 
+    <!-- GAMES -->
+    <div class="page on" id="tab-games">
+      <div id="game-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"></div>
+      <div id="no-games" style="text-align:center;color:rgba(255,255,255,.3);font-size:11px;padding:20px;letter-spacing:1px">Connecting…</div>
+      <button class="act" id="close-game-btn" style="display:none;border-color:rgba(255,100,100,.3);color:#FF6B6B">✕ Close Game</button>
+    </div>
+
     <!-- DETECT -->
-    <div class="page on" id="tab-detect">
+    <div class="page" id="tab-detect">
       <div class="sec">
         <div class="sec-title">Camera position</div>
         <label class="row">📽️ Camera behind players <div class="sw on" id="sw-back"></div></label>
@@ -248,6 +261,7 @@ function handleState(msg) {
   document.querySelectorAll('[data-quality]').forEach(b => b.classList.toggle('on', b.dataset.quality === msg.quality));
   document.querySelectorAll('[data-rot]').forEach(b => b.classList.toggle('on', parseInt(b.dataset.rot) === msg.rotation));
   document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === msg.mode));
+  buildGameGrid(msg.games, msg.activeGame);
 }
 
 // Controls
@@ -269,6 +283,35 @@ document.querySelectorAll('[data-facing]').forEach(b => b.onclick = () => send({
 $('btn-calibrate-cam').onclick = () => send({ type: 'calibrate' });
 $('btn-calibrate').onclick = () => send({ type: 'calibrate' });
 $('btn-home').onclick = () => send({ type: 'go-home' });
+$('close-game-btn').onclick = () => send({ type: 'close-game' });
+
+// Game grid
+const EMOJI = {blobz:'🔵',capy:'🐾',pusheen:'🐱',squishy:'🧸',sea:'🌊',char:'🎭',bluey:'🐶'};
+function gEmoji(n){const l=n.toLowerCase();for(const[k,v]of Object.entries(EMOJI))if(l.includes(k))return v;return'🎮';}
+
+let lastGameList = '';
+function buildGameGrid(games, active) {
+  const grid = $('game-grid');
+  const key = (games||[]).join(',');
+  if (key !== lastGameList) {
+    lastGameList = key;
+    grid.innerHTML = '';
+    (games||[]).forEach(g => {
+      const card = document.createElement('div');
+      card.className = 'gc' + (g === active ? ' running' : '');
+      card.dataset.url = g;
+      const name = g.replace(/\.html$/i,'').replace(/[-_]/g,' ');
+      card.innerHTML = `<div class="em">${gEmoji(g)}</div><div class="nm">${name}</div>`;
+      card.onclick = () => send({ type: 'launch-game', url: g });
+      grid.appendChild(card);
+    });
+    $('no-games').style.display = games && games.length ? 'none' : 'block';
+  } else {
+    // Just update running state
+    grid.querySelectorAll('.gc').forEach(c => c.classList.toggle('running', c.dataset.url === active));
+  }
+  $('close-game-btn').style.display = active ? 'block' : 'none';
+}
 </script>
 </body>
 </html>
