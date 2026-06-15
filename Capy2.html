@@ -938,6 +938,27 @@ function drawBgDecorations(ctx, time) {
 initCharacters(); initBgDecorations();
 window.addEventListener('resize', () => { resize(); initCharacters(); bgStars.length = 0; initBgDecorations(); });
 requestAnimationFrame(loop);
+
+// ═══════════════════════════════════════════════════
+//  MAGIC WALL BRIDGE — skeleton pointer input
+// ═══════════════════════════════════════════════════
+(function() {
+  const ptrMap = typeof activePointers !== "undefined" ? activePointers : (typeof pointers !== "undefined" ? pointers : null);
+  if (!ptrMap) return;
+  window.addEventListener("message", (e) => {
+    const msg = e.data;
+    if (!msg || !msg.type) return;
+    if (msg.type === "pointer") {
+      const px = msg.x * window.innerWidth;
+      const py = msg.y * window.innerHeight;
+      if (!ptrMap.has(msg.id)) onPointerDown(msg.id, px, py);
+      else onPointerMove(msg.id, px, py);
+    }
+    if (msg.type === "pointer-up") {
+      if (ptrMap.has(msg.id)) onPointerUp(msg.id);
+    }
+  });
+})();
 </script>
 </body>
 </html>
