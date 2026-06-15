@@ -84,6 +84,11 @@ html,body{height:100%;background:var(--ink);color:#fff;font-family:'JetBrains Mo
     <!-- DETECT -->
     <div class="page on" id="tab-detect">
       <div class="sec">
+        <div class="sec-title">Camera position</div>
+        <label class="row">📽️ Camera behind players <div class="sw on" id="sw-back"></div></label>
+        <div style="font-size:9px;color:rgba(255,255,255,.3);line-height:1.6">ON = projector/camera mounted behind. Swaps left/right so tracking is correct.</div>
+      </div>
+      <div class="sec">
         <div class="sec-title">Tracking options</div>
         <label class="row">Skeleton overlay <div class="sw on" id="sw-skel"></div></label>
         <label class="row">Surprise visits <div class="sw on" id="sw-autovisit"></div></label>
@@ -239,6 +244,7 @@ function handleState(msg) {
   $('feed-info').textContent = `${msg.fps||'—'} fps · ${msg.handCount||0} hands · ${msg.peopleCount||0} people`;
   $('sw-mirror').classList.toggle('on', !!msg.mirror);
   $('sw-holo').classList.toggle('on', !!msg.holo);
+  $('sw-back').classList.toggle('on', !!msg.trackingBack);
   document.querySelectorAll('[data-quality]').forEach(b => b.classList.toggle('on', b.dataset.quality === msg.quality));
   document.querySelectorAll('[data-rot]').forEach(b => b.classList.toggle('on', parseInt(b.dataset.rot) === msg.rotation));
   document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === msg.mode));
@@ -257,6 +263,7 @@ mkSwitch('sw-mirror', 'set-mirror');
 mkSwitch('sw-holo', 'set-holo');
 mkSwitch('sw-skel', 'set-skeleton');
 mkSwitch('sw-autovisit', 'set-autovisit');
+mkSwitch('sw-back', 'set-back');
 
 document.querySelectorAll('[data-facing]').forEach(b => b.onclick = () => send({ type: 'set-facing', value: b.dataset.facing }));
 $('btn-calibrate-cam').onclick = () => send({ type: 'calibrate' });
