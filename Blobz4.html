@@ -1964,13 +1964,14 @@ window.addEventListener('resize', () => {
 
 requestAnimationFrame(loop);
 
+
+
 // ═══════════════════════════════════════════════════
 //  MAGIC WALL BRIDGE — skeleton pointer input
-//  Receives: {type:"pointer", id, x, y}  (x/y normalized 0-1)
-//            {type:"pointer-up", id}
 // ═══════════════════════════════════════════════════
 (function() {
-  const ptrMap = typeof activePointers !== "undefined" ? activePointers : pointers;
+  const ptrMap = typeof activePointers !== "undefined" ? activePointers : (typeof pointers !== "undefined" ? pointers : null);
+  if (!ptrMap) return;
   window.addEventListener("message", (e) => {
     const msg = e.data;
     if (!msg || !msg.type) return;
