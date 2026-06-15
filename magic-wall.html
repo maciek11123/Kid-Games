@@ -1521,6 +1521,7 @@ setInterval(() => {
       trackingBack,
       handCount: gesture.count, peopleCount: people.length,
       fps: Math.round(frameCount > 0 ? trackFps || 0 : 0),
+      games: discoveredGames, activeGame,
     });
   } catch(e) {}
 }, 500);
@@ -1538,6 +1539,8 @@ function handleRemoteCommand(msg) {
     case 'set-autovisit': autoVisit = msg.value; $('btn-autovisit').classList.toggle('active', autoVisit); break;
     case 'set-mode':      setMode(msg.mode, msg.category); break;
     case 'go-home':       goHome(); break;
+    case 'launch-game':   launchGame(msg.url); break;
+    case 'close-game':    closeGame(); break;
     case 'calibrate':     openCalibration(); break;
   }
 }
@@ -1564,11 +1567,14 @@ function gameEmoji(name) {
   return '🎮';
 }
 
+let discoveredGames = [];
+
 async function discoverGames() {
   try {
     const r = await fetch(`https://api.github.com/repos/${REPO}/contents/`);
     const files = await r.json();
     const games = files.filter(f => f.name.endsWith('.html') && !SKIP.test(f.name));
+    discoveredGames = games.map(g => g.name);
     buildDock(games);
   } catch(e) { console.warn('Game discovery failed', e); }
 }
