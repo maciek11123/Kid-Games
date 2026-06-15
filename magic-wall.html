@@ -312,7 +312,7 @@ sizeCanvases();
 
 let lastFrameTime=performance.now(),frameCount=0,time=0;
 let currentMode='home',currentCategory='home',currentRes='med';
-let resMult=1,gameScore=0,camRotation=0,mirrorX=true,uiVisible=true,camView=false,holoEnabled=true,autoHide=true,showSkeleton=true,autoVisit=true;
+let resMult=1,gameScore=0,camRotation=0,mirrorX=true,uiVisible=true,camView=false,holoEnabled=true,autoHide=true,showSkeleton=true,autoVisit=true,trackingBack=false;
 let trackFps=0,trackFrames=0,trackFpsT=performance.now();
 let showDebug=false;
 
@@ -1619,7 +1619,7 @@ function sendToGame(data) {
   try { gf.contentWindow.postMessage(data, '*'); } catch(e) {}
 }
 
-let trackingBack = false; // true = camera behind people, swap L/R
+// trackingBack is initialized in the store.get block above
 
 // ── skeleton pointer loop ──
 const GAME_KPS = [
