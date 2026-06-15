@@ -1440,15 +1440,18 @@ function initPeer() {
     remoteBtn.style.borderColor = 'rgba(80,250,123,.5)';
     remoteBtn.style.color = '#50fa7b';
     qrOverlay.style.display = 'none';
+    conn.on('open', () => {
+      startRemoteStream(conn); // start stream only after data channel is open
+    });
     conn.on('data', handleRemoteCommand);
     conn.on('close', () => {
       remoteConn = null;
+      clearInterval(streamInterval);
       remoteBtn.textContent = '📡 Connect Remote';
       remoteBtn.style.borderColor = 'rgba(0,229,255,.4)';
       remoteBtn.style.color = '#00e5ff';
       remoteStatus.textContent = 'Disconnected';
     });
-    startRemoteStream(conn);
   });
   peer.on('error', () => { remoteStatus.textContent = 'Peer error'; });
 }
@@ -1583,7 +1586,8 @@ function launchGame(filename) {
   gf.src = filename;
   gw.style.display = 'block';
   gb.style.display = 'block';
-  showUI(false); // hide wall UI to free up repaints
+  // keep gdock visible above iframe
+  document.getElementById('gdock').style.zIndex = '10';
   startGamePose();
 }
 function closeGame() {
@@ -1592,7 +1596,8 @@ function closeGame() {
   gb.style.display = 'none';
   gf.src = '';
   activeGame = null;
-  pokeIdle(); // restore UI
+  document.getElementById('gdock').style.zIndex = '20';
+  pokeIdle();
 }
 gb.onclick = closeGame;
 
