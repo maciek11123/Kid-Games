@@ -1,0 +1,16 @@
+{
+  "name": "Magic Wall",
+  "short_name": "Magic Wall",
+  "description": "Bluey Mirror · Particle Worlds · Hand Games — interactive projected wall",
+  "start_url": "./magic-wall.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#050508",
+  "theme_color": "#00e5ff",
+  "categories": ["entertainment", "games"],
+  "icons": [
+    { "src": "icon-wall-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-wall-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
