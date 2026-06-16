@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Magic Wall — Bluey Mirror · Worlds · Games</title>
+<link rel="manifest" href="manifest-wall.json">
+<meta name="theme-color" content="#00e5ff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Magic Wall">
+<link rel="apple-touch-icon" href="icon-wall-192.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700&family=Orbitron:wght@500;700;900&family=Baloo+2:wght@600;800&display=swap');
@@ -1957,6 +1963,9 @@ discoverGames();
 renderer.setClearColor(new THREE.Color(0.02,0.02,0.03),1);
 animate();
 initCameras();
+
+// PWA service worker
+if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{})}
 </script>
 </body>
 </html>
