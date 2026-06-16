@@ -7,7 +7,7 @@
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700&family=Orbitron:wght@700;900&display=swap');
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-:root{--cyan:#00e5ff;--grass:#50fa7b;--coral:#FF6B6B;--ink:#050508;--glass:rgba(8,10,20,.88);--line:rgba(255,255,255,.09)}
+:root{--cyan:#00e5ff;--grass:#50fa7b;--coral:#FF6B6B;--violet:#be78ff;--ink:#050508;--glass:rgba(8,10,20,.88);--line:rgba(255,255,255,.09)}
 html,body{height:100%;background:var(--ink);color:#fff;font-family:'JetBrains Mono',monospace;overflow:hidden;user-select:none;touch-action:manipulation}
 
 #connect{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:24px;transition:opacity .3s}
@@ -22,18 +22,15 @@ html,body{height:100%;background:var(--ink);color:#fff;font-family:'JetBrains Mo
 #app{position:fixed;inset:0;display:flex;flex-direction:column;opacity:0;pointer-events:none;transition:opacity .3s}
 #app.on{opacity:1;pointer-events:auto}
 
-/* feed */
 #feed{position:relative;width:100%;background:#000;flex-shrink:0}
 #feed video{width:100%;height:100%;object-fit:cover;display:block;max-height:38vw}
 #feed-info{position:absolute;top:6px;left:8px;font-size:9px;color:rgba(0,229,255,.7);letter-spacing:1px;background:rgba(0,0,0,.5);padding:3px 8px;border-radius:5px;line-height:1.6}
 #conn-dot{position:absolute;top:8px;right:10px;font-size:9px;padding:3px 8px;border-radius:99px;background:rgba(80,250,123,.12);color:var(--grass);border:1px solid rgba(80,250,123,.3);letter-spacing:1px}
 
-/* tabs */
 #tabs{display:flex;border-bottom:1px solid var(--line);flex-shrink:0}
 .tab{flex:1;padding:10px 4px;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,.4);text-align:center;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
 .tab.on{color:var(--cyan);border-bottom-color:var(--cyan)}
 
-/* panels */
 #panels{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .page{display:none;padding:12px 14px;flex-direction:column;gap:10px}
 .page.on{display:flex}
@@ -43,8 +40,6 @@ html,body{height:100%;background:var(--ink);color:#fff;font-family:'JetBrains Mo
 .seg{display:flex;gap:4px;flex-wrap:wrap}
 .sb{flex:1;min-width:0;padding:8px 4px;border-radius:7px;font-family:inherit;font-size:9px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;border:1px solid var(--line);background:transparent;color:rgba(255,255,255,.45);transition:all .12s;text-align:center}
 .sb.on{background:rgba(0,229,255,.14);color:var(--cyan);border-color:rgba(0,229,255,.4)}
-.sb.g-on{background:rgba(80,250,123,.12);color:var(--grass);border-color:rgba(80,250,123,.4)}
-.sb.b-on{background:rgba(91,192,235,.14);color:#5BC0EB;border-color:rgba(91,192,235,.4)}
 .sw{position:relative;width:44px;height:24px;border-radius:99px;background:rgba(255,255,255,.12);cursor:pointer;transition:background .2s;flex-shrink:0}
 .sw::after{content:'';position:absolute;top:4px;left:4px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .2s}
 .sw.on{background:rgba(0,229,255,.5)}
@@ -59,6 +54,21 @@ html,body{height:100%;background:var(--ink);color:#fff;font-family:'JetBrains Mo
 .gc.running{border-color:rgba(80,250,123,.5);background:rgba(80,250,123,.08)}
 .gc .em{font-size:26px}
 .gc .nm{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,.5)}
+
+/* ── Perspective calibration panel ── */
+#persp-panel{display:none;flex-direction:column;gap:10px}
+#persp-panel.on{display:flex}
+.corner-sel{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.cs{padding:10px;border-radius:8px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:rgba(255,255,255,.5);font-family:inherit;font-size:10px;letter-spacing:1px;cursor:pointer;text-align:center;transition:all .12s}
+.cs.on{background:rgba(190,120,255,.14);color:var(--violet);border-color:rgba(190,120,255,.5)}
+.dpad{display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr 1fr;gap:4px;width:160px;margin:0 auto}
+.dpad button{width:100%;aspect-ratio:1;border-radius:8px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:rgba(255,255,255,.6);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit;transition:all .1s;-webkit-tap-highlight-color:transparent}
+.dpad button:active{background:rgba(0,229,255,.2);border-color:rgba(0,229,255,.5)}
+.dpad .blank{border:none;background:none}
+.persp-status{font-size:9px;text-align:center;color:rgba(255,255,255,.35);letter-spacing:1px;line-height:1.5}
+.persp-status b{color:var(--grass);font-weight:400}
+.persp-actions{display:flex;gap:6px}
+.persp-actions .act{flex:1}
 </style>
 </head>
 <body>
@@ -141,6 +151,41 @@ html,body{height:100%;background:var(--ink);color:#fff;font-family:'JetBrains Mo
         <label class="row">Mirror <div class="sw" id="sw-mirror"></div></label>
       </div>
       <button class="act" id="btn-calibrate-cam">🎯 Auto-calibrate</button>
+
+      <!-- Perspective Calibration -->
+      <button class="act" id="btn-persp-toggle" style="border-color:rgba(190,120,255,.3);color:var(--violet);margin-top:2px">⧉ Perspective Calibration</button>
+
+      <div id="persp-panel">
+        <div class="persp-status" id="persp-status">No perspective calibration active</div>
+        <div class="sec">
+          <div class="sec-title">Select corner</div>
+          <div class="corner-sel">
+            <button class="cs on" data-corner="0">↖ Top-Left</button>
+            <button class="cs" data-corner="1">↗ Top-Right</button>
+            <button class="cs" data-corner="2">↘ Bottom-Left</button>
+            <button class="cs" data-corner="3">↙ Bottom-Right</button>
+          </div>
+        </div>
+        <div class="sec">
+          <div class="sec-title">Nudge selected corner</div>
+          <div class="dpad">
+            <div class="blank"></div>
+            <button data-dir="up">▲</button>
+            <div class="blank"></div>
+            <button data-dir="left">◀</button>
+            <button data-dir="fine" style="font-size:9px;letter-spacing:1px">FINE</button>
+            <button data-dir="right">▶</button>
+            <div class="blank"></div>
+            <button data-dir="down">▼</button>
+            <div class="blank"></div>
+          </div>
+          <div style="font-size:8px;color:rgba(255,255,255,.25);text-align:center;letter-spacing:1px;margin-top:2px">Hold FINE then tap arrow for small steps</div>
+        </div>
+        <div class="persp-actions">
+          <button class="act" id="persp-save" style="border-color:rgba(80,250,123,.3);color:var(--grass)">✓ Save</button>
+          <button class="act" id="persp-reset" style="border-color:rgba(255,100,100,.3);color:var(--coral)">↺ Reset</button>
+        </div>
+      </div>
     </div>
 
     <!-- WALL -->
@@ -200,7 +245,7 @@ document.querySelectorAll('.tab').forEach(t => {
   };
 });
 
-// PeerJS lazy load
+// ── PeerJS ──
 let peer = null, conn = null;
 function loadPeerJS() {
   return new Promise((res, rej) => {
@@ -211,7 +256,6 @@ function loadPeerJS() {
     document.head.appendChild(s);
   });
 }
-
 function send(data) { if (conn && conn.open) try { conn.send(data); } catch(e) {} }
 
 function connect(roomId) {
@@ -251,7 +295,7 @@ $('disc').onclick = () => {
   $('connect-btn').textContent = 'Connect';
 };
 
-// State sync from wall
+// ── State sync from wall ──
 function handleState(msg) {
   if (!msg || msg.type !== 'state') return;
   $('feed-info').textContent = `${msg.fps||'—'} fps · ${msg.handCount||0} hands · ${msg.peopleCount||0} people`;
@@ -261,10 +305,29 @@ function handleState(msg) {
   document.querySelectorAll('[data-quality]').forEach(b => b.classList.toggle('on', b.dataset.quality === msg.quality));
   document.querySelectorAll('[data-rot]').forEach(b => b.classList.toggle('on', parseInt(b.dataset.rot) === msg.rotation));
   document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === msg.mode));
+
+  // Camera facing — FIX: sync which camera is active
+  document.querySelectorAll('[data-facing]').forEach(b => b.classList.toggle('on', b.dataset.facing === msg.facing));
+
+  // Perspective status
+  if (msg.hasPerspective) {
+    $('persp-status').innerHTML = 'Perspective: <b>active ✓</b>';
+  } else if (msg.perspCalibActive) {
+    $('persp-status').innerHTML = 'Perspective: <b style="color:#00e5ff">calibrating…</b>';
+  } else {
+    $('persp-status').textContent = 'No perspective calibration active';
+  }
+
+  // Update selected corner indicator
+  if (msg.perspCalibActive && msg.perspCorner !== undefined) {
+    selectedCorner = msg.perspCorner;
+    document.querySelectorAll('.cs').forEach(b => b.classList.toggle('on', parseInt(b.dataset.corner) === selectedCorner));
+  }
+
   buildGameGrid(msg.games, msg.activeGame);
 }
 
-// Controls
+// ── Controls ──
 document.querySelectorAll('[data-rot]').forEach(b => b.onclick = () => send({ type: 'set-rotation', value: parseInt(b.dataset.rot) }));
 document.querySelectorAll('[data-quality]').forEach(b => b.onclick = () => send({ type: 'set-quality', value: b.dataset.quality }));
 document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => send({ type: 'set-mode', mode: b.dataset.mode, category: b.dataset.cat }));
@@ -279,13 +342,67 @@ mkSwitch('sw-skel', 'set-skeleton');
 mkSwitch('sw-autovisit', 'set-autovisit');
 mkSwitch('sw-back', 'set-back');
 
+// Camera facing buttons — these now properly highlight via handleState
 document.querySelectorAll('[data-facing]').forEach(b => b.onclick = () => send({ type: 'set-facing', value: b.dataset.facing }));
 $('btn-calibrate-cam').onclick = () => send({ type: 'calibrate' });
 $('btn-calibrate').onclick = () => send({ type: 'calibrate' });
 $('btn-home').onclick = () => send({ type: 'go-home' });
 $('close-game-btn').onclick = () => send({ type: 'close-game' });
 
-// Game grid
+// ── Perspective Calibration ──
+let perspOpen = false;
+let selectedCorner = 0;
+let fineMode = false;
+
+$('btn-persp-toggle').onclick = () => {
+  perspOpen = !perspOpen;
+  $('persp-panel').classList.toggle('on', perspOpen);
+  if (perspOpen) {
+    send({ type: 'persp-open' });
+    $('btn-persp-toggle').textContent = '⧉ Hide Perspective Panel';
+    $('btn-persp-toggle').style.borderColor = 'rgba(190,120,255,.5)';
+    $('btn-persp-toggle').style.background = 'rgba(190,120,255,.1)';
+  } else {
+    $('btn-persp-toggle').textContent = '⧉ Perspective Calibration';
+    $('btn-persp-toggle').style.borderColor = 'rgba(190,120,255,.3)';
+    $('btn-persp-toggle').style.background = 'transparent';
+  }
+};
+
+// Corner selection
+document.querySelectorAll('.cs').forEach(b => {
+  b.onclick = () => {
+    selectedCorner = parseInt(b.dataset.corner);
+    document.querySelectorAll('.cs').forEach(x => x.classList.toggle('on', x === b));
+    send({ type: 'persp-select', corner: selectedCorner });
+  };
+});
+
+// D-pad
+const fineBtn = document.querySelector('[data-dir="fine"]');
+fineBtn.addEventListener('pointerdown', () => { fineMode = true; fineBtn.style.background = 'rgba(0,229,255,.2)'; fineBtn.style.color = '#00e5ff'; });
+fineBtn.addEventListener('pointerup', () => { fineMode = false; fineBtn.style.background = ''; fineBtn.style.color = ''; });
+fineBtn.addEventListener('pointerleave', () => { fineMode = false; fineBtn.style.background = ''; fineBtn.style.color = ''; });
+
+document.querySelectorAll('.dpad [data-dir]').forEach(b => {
+  if (b.dataset.dir === 'fine') return;
+  // Support repeated nudging via touch-hold
+  let holdInterval = null;
+  const doNudge = () => send({ type: 'persp-nudge', dir: b.dataset.dir, amount: fineMode ? 0.002 : 0.008 });
+  b.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    doNudge();
+    holdInterval = setInterval(doNudge, 80);
+  });
+  b.addEventListener('pointerup', () => clearInterval(holdInterval));
+  b.addEventListener('pointerleave', () => clearInterval(holdInterval));
+  b.addEventListener('pointercancel', () => clearInterval(holdInterval));
+});
+
+$('persp-save').onclick = () => send({ type: 'persp-save' });
+$('persp-reset').onclick = () => send({ type: 'persp-reset' });
+
+// ── Game grid ──
 const EMOJI = {blobz:'🔵',capy:'🐾',pusheen:'🐱',squishy:'🧸',sea:'🌊',char:'🎭',bluey:'🐶'};
 function gEmoji(n){const l=n.toLowerCase();for(const[k,v]of Object.entries(EMOJI))if(l.includes(k))return v;return'🎮';}
 
@@ -307,7 +424,6 @@ function buildGameGrid(games, active) {
     });
     $('no-games').style.display = games && games.length ? 'none' : 'block';
   } else {
-    // Just update running state
     grid.querySelectorAll('.gc').forEach(c => c.classList.toggle('running', c.dataset.url === active));
   }
   $('close-game-btn').style.display = active ? 'block' : 'none';
