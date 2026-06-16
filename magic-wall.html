@@ -126,6 +126,17 @@ video#cam.cam-on{opacity:1}
 #hint{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.9);font:800 26px 'Baloo 2',sans-serif;z-index:50;text-shadow:0 2px 12px rgba(0,0,0,.8);opacity:0;transition:opacity 1s;pointer-events:none}
 #hint.show{opacity:1}
 #debug{display:none;position:fixed;top:120px;left:14px;color:#0f0;font:12px/1.6 monospace;background:rgba(0,0,0,.8);padding:12px 16px;border-radius:8px;z-index:500;white-space:pre-wrap;max-width:70vw}
+
+/* ───────── perspective calibration overlay ───────── */
+#persp-overlay{position:fixed;inset:0;z-index:310;display:none;background:#000}
+#persp-overlay.show{display:block}
+#persp-canvas{position:absolute;inset:0;width:100vw;height:100dvh}
+#persp-hud{position:absolute;bottom:max(24px,env(safe-area-inset-bottom,24px));left:50%;transform:translateX(-50%);display:flex;gap:8px;align-items:center;z-index:5}
+#persp-hud .pbtn{padding:8px 16px;border-radius:8px;font:11px/1 'JetBrains Mono',monospace;letter-spacing:1px;text-transform:uppercase;cursor:pointer;border:1px solid rgba(0,229,255,.4);background:rgba(0,229,255,.1);color:var(--cyan);transition:all .15s}
+#persp-hud .pbtn.save{border-color:rgba(80,250,123,.5);background:rgba(80,250,123,.1);color:var(--grass)}
+#persp-hud .pbtn.cancel{border-color:rgba(255,100,100,.3);background:transparent;color:var(--coral)}
+#persp-info{position:absolute;top:max(20px,env(safe-area-inset-top,20px));left:50%;transform:translateX(-50%);font:700 14px/1.5 'Orbitron',sans-serif;color:var(--cyan);letter-spacing:2px;z-index:5;text-align:center;text-shadow:0 2px 8px rgba(0,0,0,.8)}
+#persp-corner-label{font:11px/1.4 'JetBrains Mono',monospace;color:rgba(255,255,255,.5);letter-spacing:1px;margin-top:4px}
 </style>
 </head>
 <body>
@@ -272,6 +283,17 @@ video#cam.cam-on{opacity:1}
 <div id="hint">👋 Wave to say hi!</div>
 <div id="debug"></div>
 
+<!-- Perspective calibration overlay (full-screen on wall/projector) -->
+<div id="persp-overlay">
+  <canvas id="persp-canvas"></canvas>
+  <div id="persp-info">PERSPECTIVE CALIBRATION<div id="persp-corner-label">Select a corner on Remote, then use D-pad to align grid with wall</div></div>
+  <div id="persp-hud">
+    <button class="pbtn cancel" id="persp-cancel">✕ Cancel</button>
+    <button class="pbtn" id="persp-reset">↺ Reset</button>
+    <button class="pbtn save" id="persp-save">✓ Save &amp; Apply</button>
+  </div>
+</div>
+
 <!-- Game iframe -->
 <div id="gw" style="position:fixed;inset:0;z-index:50;display:none;background:#000"><iframe id="gf" allow="camera;microphone" sandbox="allow-scripts allow-same-origin allow-popups" style="width:100%;height:100%;border:none"></iframe></div>
 <button id="gb" style="display:none;position:fixed;top:max(12px,env(safe-area-inset-top,12px));left:max(12px,env(safe-area-inset-left,12px));z-index:60;padding:8px 14px;background:rgba(0,0,0,.75);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;font-family:inherit;font-size:11px;letter-spacing:1px;cursor:pointer">✕ Back to Wall</button>
@@ -329,6 +351,12 @@ resMult={low:.3,med:1,high:2}[currentRes];
 holoEnabled=store.get('holo',true);
 autoHide=store.get('autohide',false);
 trackingBack=store.get('trackingBack',true); // default ON — projector is behind players
+
+// perspective calibration state
+let currentFacing='user';
+let perspCorners=store.get('perspCorners',null); // [{x,y},...] in normalised 0-1 space
+let perspMatrix=null; // computed 3×3 forward homography (cam→screen)
+if(perspCorners) perspMatrix=computeHomographyMatrix(perspCorners);
 
 // gesture state (hands)
 let gesture={count:0,fist:false,h1:null,h2:null,hands:[]};
@@ -395,8 +423,8 @@ async function startCam(opt={}){
   currentDeviceId=track.getSettings().deviceId||opt.deviceId||null;
   if(currentDeviceId){store.set('deviceId',currentDeviceId);
     for(let i=0;i<camSelect.options.length;i++)if(camSelect.options[i].value===currentDeviceId){camSelect.selectedIndex=i;break}}
-  // auto-suggest mirror by facing, only if user never calibrated/changed it
   const facing=track.getSettings().facingMode;
+  currentFacing=facing||opt.facing||'user';
   if(facing&&!store.get('mirrorLocked',false)){setMirror(facing!=='environment',false)}
   videoElement.srcObject=activeStream;
   try{await videoElement.play()}catch(e){}
@@ -444,6 +472,214 @@ function setMirror(on,lock=true){
   store.set('mirror',on);
   if(lock)store.set('mirrorLocked',true);
 }
+
+// ═══════════════════════════════════════════════════
+//  4-POINT PERSPECTIVE CALIBRATION (homography)
+// ═══════════════════════════════════════════════════
+
+// Solve 8×8 linear system via Gaussian elimination → 3×3 homography
+// Maps unit square corners [(0,0),(1,0),(1,1),(0,1)] to dst corners
+function computeHomographyMatrix(dst){
+  // dst = [{x,y},{x,y},{x,y},{x,y}] — TL,TR,BR,BL in normalised 0-1 space
+  if(!dst||dst.length!==4) return null;
+  const [tl,tr,br,bl]=dst;
+  // Source corners are unit square
+  const sx=[0,1,1,0], sy=[0,0,1,1];
+  const dx=[tl.x,tr.x,br.x,bl.x], dy=[tl.y,tr.y,br.y,bl.y];
+  // Build 8×9 augmented matrix for DLT
+  const A=[];
+  for(let i=0;i<4;i++){
+    A.push([sx[i],sy[i],1,0,0,0,-dx[i]*sx[i],-dx[i]*sy[i],dx[i]]);
+    A.push([0,0,0,sx[i],sy[i],1,-dy[i]*sx[i],-dy[i]*sy[i],dy[i]]);
+  }
+  // Gaussian elimination
+  const n=8;
+  for(let col=0;col<n;col++){
+    let maxRow=col,maxVal=Math.abs(A[col][col]);
+    for(let row=col+1;row<n;row++){const v=Math.abs(A[row][col]);if(v>maxVal){maxVal=v;maxRow=row}}
+    if(maxRow!==col)[A[col],A[maxRow]]=[A[maxRow],A[col]];
+    if(Math.abs(A[col][col])<1e-12) return null;
+    for(let row=col+1;row<n;row++){
+      const f=A[row][col]/A[col][col];
+      for(let j=col;j<=n;j++) A[row][j]-=f*A[col][j];
+    }
+  }
+  // Back-substitute
+  const h=new Array(8);
+  for(let i=n-1;i>=0;i--){
+    h[i]=A[i][n];
+    for(let j=i+1;j<n;j++) h[i]-=A[i][j]*h[j];
+    h[i]/=A[i][i];
+  }
+  // 3×3 matrix [h0 h1 h2; h3 h4 h5; h6 h7 1]
+  return [h[0],h[1],h[2],h[3],h[4],h[5],h[6],h[7],1];
+}
+
+// Apply perspective: takes normalised (0-1) point, returns normalised output
+function applyPersp(nx,ny){
+  if(!perspMatrix) return {x:nx,y:ny};
+  const m=perspMatrix;
+  const w=m[6]*nx+m[7]*ny+m[8];
+  if(Math.abs(w)<1e-10) return {x:nx,y:ny};
+  return {x:(m[0]*nx+m[1]*ny+m[2])/w, y:(m[3]*nx+m[4]*ny+m[5])/w};
+}
+
+// Compute inverse homography (for screen→cam mapping)
+function invertMatrix3(m){
+  const [a,b,c,d,e,f,g,h,i]=m;
+  const det=a*(e*i-f*h)-b*(d*i-f*g)+c*(d*h-e*g);
+  if(Math.abs(det)<1e-12) return null;
+  const id=1/det;
+  return[
+    (e*i-f*h)*id,(c*h-b*i)*id,(b*f-c*e)*id,
+    (f*g-d*i)*id,(a*i-c*g)*id,(c*d-a*f)*id,
+    (d*h-e*g)*id,(b*g-a*h)*id,(a*e-b*d)*id
+  ];
+}
+
+// ---- Perspective overlay drawing ----
+const perspOverlay=$('persp-overlay'), perspCanvas=$('persp-canvas');
+let perspActive=false, perspEditCorners=null, perspSelectedCorner=0;
+
+function openPerspCalib(){
+  // Init editable corners — start from saved or default rectangle
+  perspEditCorners=perspCorners
+    ? perspCorners.map(c=>({...c}))
+    : [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}];
+  perspSelectedCorner=0;
+  perspActive=true;
+  perspOverlay.classList.add('show');
+  perspCanvas.width=W; perspCanvas.height=H;
+  drawPerspGrid();
+}
+
+function closePerspCalib(save){
+  perspActive=false;
+  perspOverlay.classList.remove('show');
+  if(save&&perspEditCorners){
+    perspCorners=perspEditCorners.map(c=>({...c}));
+    perspMatrix=computeHomographyMatrix(perspCorners);
+    store.set('perspCorners',perspCorners);
+    toast('✓ Perspective saved');
+  }
+}
+
+function resetPerspCalib(){
+  perspCorners=null; perspMatrix=null;
+  store.set('perspCorners',null);
+  perspEditCorners=[{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}];
+  drawPerspGrid();
+  toast('Perspective reset');
+}
+
+function nudgePerspCorner(dir,amount){
+  if(!perspEditCorners||!perspActive) return;
+  const c=perspEditCorners[perspSelectedCorner];
+  const step=amount||0.005;
+  if(dir==='left')  c.x=Math.max(-0.15,c.x-step);
+  if(dir==='right') c.x=Math.min(1.15,c.x+step);
+  if(dir==='up')    c.y=Math.max(-0.15,c.y-step);
+  if(dir==='down')  c.y=Math.min(1.15,c.y+step);
+  drawPerspGrid();
+}
+
+function drawPerspGrid(){
+  if(!perspCanvas||!perspEditCorners) return;
+  const ctx=perspCanvas.getContext('2d');
+  const w=perspCanvas.width, h=perspCanvas.height;
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,w,h);
+  const corners=perspEditCorners.map(c=>({x:c.x*w,y:c.y*h}));
+  const [tl,tr,br,bl]=corners;
+
+  // Draw perspective-warped grid lines
+  const DIVISIONS=8;
+  ctx.strokeStyle='rgba(255,255,255,0.35)';
+  ctx.lineWidth=1;
+  // Horizontal lines
+  for(let i=0;i<=DIVISIONS;i++){
+    const t=i/DIVISIONS;
+    const leftPt={x:tl.x+(bl.x-tl.x)*t, y:tl.y+(bl.y-tl.y)*t};
+    const rightPt={x:tr.x+(br.x-tr.x)*t, y:tr.y+(br.y-tr.y)*t};
+    ctx.beginPath(); ctx.moveTo(leftPt.x,leftPt.y); ctx.lineTo(rightPt.x,rightPt.y); ctx.stroke();
+  }
+  // Vertical lines
+  for(let i=0;i<=DIVISIONS;i++){
+    const t=i/DIVISIONS;
+    const topPt={x:tl.x+(tr.x-tl.x)*t, y:tl.y+(tr.y-tl.y)*t};
+    const botPt={x:bl.x+(br.x-bl.x)*t, y:bl.y+(br.y-bl.y)*t};
+    ctx.beginPath(); ctx.moveTo(topPt.x,topPt.y); ctx.lineTo(botPt.x,botPt.y); ctx.stroke();
+  }
+
+  // Quad border
+  ctx.strokeStyle='#00e5ff'; ctx.lineWidth=2.5;
+  ctx.beginPath();
+  ctx.moveTo(tl.x,tl.y); ctx.lineTo(tr.x,tr.y);
+  ctx.lineTo(br.x,br.y); ctx.lineTo(bl.x,bl.y); ctx.closePath();
+  ctx.stroke();
+
+  // Corner handles
+  const labels=['TL','TR','BR','BL'];
+  corners.forEach((c,i)=>{
+    const selected=i===perspSelectedCorner;
+    const r=selected?14:10;
+    ctx.fillStyle=selected?'#00e5ff':'rgba(255,255,255,0.7)';
+    ctx.beginPath(); ctx.arc(c.x,c.y,r,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=selected?'#000':'#000';
+    ctx.font=`bold ${selected?11:9}px 'JetBrains Mono',monospace`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(labels[i],c.x,c.y);
+    // Crosshair on selected
+    if(selected){
+      ctx.strokeStyle='rgba(0,229,255,0.5)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(c.x-30,c.y); ctx.lineTo(c.x+30,c.y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(c.x,c.y-30); ctx.lineTo(c.x,c.y+30); ctx.stroke();
+    }
+  });
+
+  // Update label
+  $('persp-corner-label').textContent=`Selected: ${labels[perspSelectedCorner]} corner · D-pad or tap to adjust`;
+}
+
+// Touch/click on overlay to select nearest corner
+perspCanvas.addEventListener('pointerdown',e=>{
+  if(!perspActive||!perspEditCorners) return;
+  const rect=perspCanvas.getBoundingClientRect();
+  const px=(e.clientX-rect.left)/(rect.width), py=(e.clientY-rect.top)/(rect.height);
+  let minD=Infinity, closest=0;
+  perspEditCorners.forEach((c,i)=>{
+    const d=Math.hypot(c.x-px,c.y-py);
+    if(d<minD){minD=d;closest=i}
+  });
+  perspSelectedCorner=closest;
+  drawPerspGrid();
+});
+
+// Touch drag support
+let perspDragging=false;
+perspCanvas.addEventListener('pointermove',e=>{
+  if(!perspActive||!perspEditCorners||!(e.buttons&1)) return;
+  const rect=perspCanvas.getBoundingClientRect();
+  const px=(e.clientX-rect.left)/(rect.width), py=(e.clientY-rect.top)/(rect.height);
+  perspEditCorners[perspSelectedCorner].x=Math.max(-0.15,Math.min(1.15,px));
+  perspEditCorners[perspSelectedCorner].y=Math.max(-0.15,Math.min(1.15,py));
+  drawPerspGrid();
+});
+
+// Keyboard shortcuts in calibration mode
+document.addEventListener('keydown',e=>{
+  if(!perspActive) return;
+  if(e.key==='ArrowLeft') nudgePerspCorner('left',e.shiftKey?.02:.005);
+  if(e.key==='ArrowRight') nudgePerspCorner('right',e.shiftKey?.02:.005);
+  if(e.key==='ArrowUp') nudgePerspCorner('up',e.shiftKey?.02:.005);
+  if(e.key==='ArrowDown') nudgePerspCorner('down',e.shiftKey?.02:.005);
+  if(e.key==='Tab'){e.preventDefault();perspSelectedCorner=(perspSelectedCorner+1)%4;drawPerspGrid()}
+  if(e.key==='Enter'){closePerspCalib(true)}
+  if(e.key==='Escape'){closePerspCalib(false)}
+});
+
+$('persp-save').onclick=()=>closePerspCalib(true);
+$('persp-cancel').onclick=()=>closePerspCalib(false);
+$('persp-reset').onclick=()=>resetPerspCalib();
 
 // ═══════════════════════════════════════════════════
 //  ENGINE LOADERS (lazy)
@@ -717,7 +953,12 @@ function blueyMap(){
   const s=Math.max(W/d.w,H/d.h);
   return{s,ox:(d.w*s-W)/2,oy:(d.h*s-H)/2,sw:d.w,sh:d.h};
 }
-function b2px(x,y,m){let px=x*m.s-m.ox;if(mirrorX)px=W-px;return{x:px,y:y*m.s-m.oy}}
+function b2px(x,y,m){
+  let px=x*m.s-m.ox; if(mirrorX) px=W-px;
+  let py=y*m.s-m.oy;
+  if(perspMatrix){const p=applyPersp(px/W,py/H);return{x:p.x*W,y:p.y*H}}
+  return{x:px,y:py};
+}
 
 function newPerson(det,ci){return{...det,ci,ghost:0,waveHist:[],lastWaveTrigger:0,holdStart:null,holdProgress:0,handUp:false,waveProgress:0}}
 
@@ -933,7 +1174,9 @@ function onHandsResults(results){
     // pipe palm position directly to game — no separate detector needed
     if(activeGame){
       const id=`hand-${i}`;
-      sendToGame({type:'pointer',id,x:hx,y:hy});
+      let gx=hx, gy=hy;
+      if(perspMatrix){const gp=applyPersp(gx,gy);gx=gp.x;gy=gp.y}
+      sendToGame({type:'pointer',id,x:gx,y:gy});
       clearTimeout(gpTimers[id]);
       gpTimers[id]=setTimeout(()=>sendToGame({type:'pointer-up',id}),150);
     }
@@ -954,9 +1197,15 @@ function drawHolo(){
     if(!h||!h.lm)continue;
     const lm=h.lm,lerp=0.3;
     const palmCenter={x:(lm[0].x+lm[5].x+lm[9].x+lm[13].x+lm[17].x)/5,y:(lm[0].y+lm[5].y+lm[9].y+lm[13].y+lm[17].y)/5};
-    let px=mirrorX?(1-palmCenter.x)*W:palmCenter.x*W, py=palmCenter.y*H;
+    let pnx=mirrorX?1-palmCenter.x:palmCenter.x, pny=palmCenter.y;
+    if(perspMatrix){const pp=applyPersp(pnx,pny);pnx=pp.x;pny=pp.y}
+    let px=pnx*W, py=pny*H;
     sm.palmX+=(px-sm.palmX)*lerp;sm.palmY+=(py-sm.palmY)*lerp;px=sm.palmX;py=sm.palmY;
-    const tips=[4,8,12,16,20].map(i=>({x:mirrorX?(1-lm[i].x)*W:lm[i].x*W,y:lm[i].y*H}));
+    const tips=[4,8,12,16,20].map(i=>{
+      let tx=mirrorX?1-lm[i].x:lm[i].x, ty=lm[i].y;
+      if(perspMatrix){const tp=applyPersp(tx,ty);tx=tp.x;ty=tp.y}
+      return{x:tx*W,y:ty*H};
+    });
     for(let ti=0;ti<5;ti++){sm.trails[ti].unshift({x:tips[ti].x,y:tips[ti].y});if(sm.trails[ti].length>TRAIL_LEN)sm.trails[ti].pop()}
     const state=h.state,t=time;
     // scan line on first detect
@@ -1526,7 +1775,10 @@ setInterval(() => {
       mode: currentMode, category: currentCategory,
       rotation: camRotation, mirror: mirrorX,
       quality: currentRes, holo: holoEnabled,
-      trackingBack,
+      trackingBack, facing: currentFacing,
+      hasPerspective: !!perspMatrix,
+      perspCalibActive: perspActive,
+      perspCorner: perspSelectedCorner,
       handCount: gesture.count, peopleCount: people.length,
       fps: Math.round(frameCount > 0 ? trackFps || 0 : 0),
       games: discoveredGames, activeGame,
@@ -1550,6 +1802,12 @@ function handleRemoteCommand(msg) {
     case 'launch-game':   launchGame(msg.url); break;
     case 'close-game':    closeGame(); break;
     case 'calibrate':     openCalibration(); break;
+    case 'persp-open':     openPerspCalib(); break;
+    case 'persp-close':    closePerspCalib(false); break;
+    case 'persp-save':     closePerspCalib(true); break;
+    case 'persp-reset':    resetPerspCalib(); break;
+    case 'persp-select':   perspSelectedCorner=msg.corner||0; drawPerspGrid(); break;
+    case 'persp-nudge':    nudgePerspCorner(msg.dir, msg.amount); break;
   }
 }
 
@@ -1667,8 +1925,9 @@ async function startGamePose() {
                   : idx;
                 const kp = pose.keypoints[swappedIdx];
                 if (!kp || kp.score < 0.15) return;
-                const x = mirrorX ? 1 - kp.x/dim.w : kp.x/dim.w;
-                const y = kp.y/dim.h;
+                let x = mirrorX ? 1 - kp.x/dim.w : kp.x/dim.w;
+                let y = kp.y/dim.h;
+                if(perspMatrix){const pp=applyPersp(x,y);x=pp.x;y=pp.y}
                 const ptId = `skel-${pi}-${id}`;
                 sendToGame({type:'pointer', id:ptId, x, y});
                 clearTimeout(gpTimers[ptId]);
