@@ -76,10 +76,17 @@ html,body{height:100%;background:var(--ink);color:#fff;font-family:'JetBrains Mo
 .persp-actions{display:flex;gap:6px}
 .persp-actions .act{flex:1}
 
-/* install button */
+/* install */
 #install-home{padding:12px 28px;border-radius:99px;font-family:inherit;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;border:1px solid rgba(80,250,123,.5);background:rgba(80,250,123,.12);color:var(--grass);transition:all .15s;margin-top:6px}
 #install-home:active{background:rgba(80,250,123,.25)}
 #install-bar{font-size:9px;padding:4px 10px;border-radius:6px;border:1px solid rgba(80,250,123,.4);background:rgba(80,250,123,.1);color:var(--grass);cursor:pointer;font-family:inherit;letter-spacing:1px}
+.installed #install-home,.installed #install-bar{display:none!important}
+#install-guide{position:fixed;inset:0;z-index:600;background:rgba(3,4,10,.92);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:28px;text-align:center}
+#install-guide.open{display:flex}
+#install-guide h2{font-family:'Orbitron',sans-serif;font-size:18px;letter-spacing:2px;color:var(--cyan)}
+#install-guide .steps{font-size:13px;line-height:2;color:rgba(255,255,255,.7);max-width:300px}
+#install-guide .steps b{color:#fff}
+#install-guide .close-guide{padding:10px 24px;border-radius:99px;font-family:inherit;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;border:1px solid var(--line);background:transparent;color:rgba(255,255,255,.5);margin-top:8px}
 </style>
 </head>
 <body>
@@ -91,7 +98,7 @@ html,body{height:100%;background:var(--ink);color:#fff;font-family:'JetBrains Mo
   <input id="room-input" type="text" placeholder="mw-xxxxxx" autocomplete="off" autocorrect="off" spellcheck="false">
   <button id="connect-btn">Connect</button>
   <div id="connect-error"></div>
-  <button id="install-home" style="display:none">📲 Install App</button>
+  <button id="install-home">📲 Install App</button>
 </div>
 
 <!-- APP -->
@@ -237,10 +244,17 @@ html,body{height:100%;background:var(--ink);color:#fff;font-family:'JetBrains Mo
   <div id="bar">
     <span id="room-label">—</span>
     <div style="display:flex;gap:6px;align-items:center">
-      <button id="install-bar" style="display:none">📲 Install</button>
+      <button id="install-bar">📲 Install</button>
       <button id="disc">Disconnect</button>
     </div>
   </div>
+</div>
+
+<!-- Install guide fallback -->
+<div id="install-guide">
+  <h2>Install MW Remote</h2>
+  <div class="steps" id="guide-steps"></div>
+  <button class="close-guide" id="guide-close">Got it</button>
 </div>
 
 <script>
@@ -444,42 +458,55 @@ function buildGameGrid(games, active) {
   $('close-game-btn').style.display = active ? 'block' : 'none';
 }
 
-// ── PWA Install Prompt ──
-let deferredInstall = null;
-const installHome = $('install-home');
-const installBar = $('install-bar');
+// ── PWA Install ──
+let _deferredPrompt = null;
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+if (isStandalone) document.body.classList.add('installed');
 
-// Already running as installed app — hide everything
-if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) {
-  // already installed, buttons stay hidden
-} else {
-  window.addEventListener('beforeinstallprompt', e => {
-    e.preventDefault();
-    deferredInstall = e;
-    installHome.style.display = '';
-    installBar.style.display = '';
-  });
-}
-
-function doInstall() {
-  if (!deferredInstall) return;
-  deferredInstall.prompt();
-  deferredInstall.userChoice.then(result => {
-    if (result.outcome === 'accepted') {
-      installHome.style.display = 'none';
-      installBar.style.display = 'none';
-    }
-    deferredInstall = null;
-  });
-}
-installHome.onclick = doInstall;
-installBar.onclick = doInstall;
+// Capture Chrome's install prompt when it fires
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  _deferredPrompt = e;
+});
 
 window.addEventListener('appinstalled', () => {
-  installHome.style.display = 'none';
-  installBar.style.display = 'none';
-  deferredInstall = null;
+  document.body.classList.add('installed');
+  _deferredPrompt = null;
 });
+
+// Platform detection for fallback instructions
+function getPlatformGuide() {
+  const ua = navigator.userAgent;
+  if (/iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+    return '<b>Safari only:</b><br>1. Tap the <b>Share</b> button ⎋<br>2. Scroll down, tap <b>Add to Home Screen</b><br>3. Tap <b>Add</b>';
+  }
+  if (/Android/.test(ua) && /Chrome/.test(ua)) {
+    return '1. Tap <b>⋮</b> (three dots) top-right<br>2. Tap <b>Add to Home screen</b><br>3. Tap <b>Install</b>';
+  }
+  if (/Chrome/.test(ua)) {
+    return '1. Click the <b>install icon</b> in the address bar<br>2. Or: ⋮ menu → <b>Install app</b>';
+  }
+  return '1. Open your browser menu<br>2. Look for <b>Add to Home Screen</b> or <b>Install</b>';
+}
+
+function installPWA() {
+  if (_deferredPrompt) {
+    // Native prompt available — use it
+    _deferredPrompt.prompt();
+    _deferredPrompt.userChoice.then(r => {
+      if (r.outcome === 'accepted') document.body.classList.add('installed');
+      _deferredPrompt = null;
+    });
+  } else {
+    // Fallback: show manual guide
+    $('guide-steps').innerHTML = getPlatformGuide();
+    $('install-guide').classList.add('open');
+  }
+}
+
+$('install-home').onclick = installPWA;
+$('install-bar').onclick = installPWA;
+$('guide-close').onclick = () => $('install-guide').classList.remove('open');
 
 // PWA service worker
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{})}
