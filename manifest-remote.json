@@ -1,0 +1,16 @@
+{
+  "name": "Magic Wall Remote",
+  "short_name": "MW Remote",
+  "description": "Phone remote control for Magic Wall",
+  "start_url": "./magic-wall-remote.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#050508",
+  "theme_color": "#050508",
+  "categories": ["utilities"],
+  "icons": [
+    { "src": "icon-remote-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-remote-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
