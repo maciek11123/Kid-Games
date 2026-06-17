@@ -126,25 +126,9 @@ html,body{height:100%;background:var(--ink);color:#fff;font-family:'JetBrains Mo
     <!-- DETECT -->
     <div class="page" id="tab-detect">
       <div class="sec">
-        <div class="sec-title">Camera position</div>
-        <label class="row">📽️ Camera behind players <div class="sw on" id="sw-back"></div></label>
-        <div style="font-size:9px;color:rgba(255,255,255,.3);line-height:1.6">ON = projector/camera mounted behind. Swaps left/right so tracking is correct.</div>
+        <div class="sec-title">Tracking — MoveNet MultiPose</div>
+        <div style="font-size:10px;color:rgba(255,255,255,.45);line-height:1.8">Tallest body = P1 · Shortest = P2<br>Tracks raised wrist as cursor<br>No calibration needed</div>
       </div>
-      <div class="sec">
-        <div class="sec-title">Tracking options</div>
-        <label class="row">Skeleton overlay <div class="sw on" id="sw-skel"></div></label>
-        <label class="row">Surprise visits <div class="sw on" id="sw-autovisit"></div></label>
-        <label class="row">Holo hands <div class="sw on" id="sw-holo"></div></label>
-      </div>
-      <div class="sec">
-        <div class="sec-title">Quality</div>
-        <div class="seg">
-          <div class="sb" data-quality="low">Low</div>
-          <div class="sb on" data-quality="med">Med</div>
-          <div class="sb" data-quality="high">High</div>
-        </div>
-      </div>
-      <button class="act" id="btn-calibrate">🎯 Auto-calibrate</button>
     </div>
 
     <!-- CAMERA -->
@@ -169,8 +153,6 @@ html,body{height:100%;background:var(--ink);color:#fff;font-family:'JetBrains Mo
         <div class="sec-title">Image</div>
         <label class="row">Mirror <div class="sw" id="sw-mirror"></div></label>
       </div>
-      <button class="act" id="btn-calibrate-cam">🎯 Auto-calibrate</button>
-
       <!-- Perspective Calibration -->
       <button class="act" id="btn-persp-toggle" style="border-color:rgba(190,120,255,.3);color:var(--violet);margin-top:2px">⧉ Perspective Calibration</button>
 
@@ -210,31 +192,17 @@ html,body{height:100%;background:var(--ink);color:#fff;font-family:'JetBrains Mo
     <!-- WALL -->
     <div class="page" id="tab-wall">
       <div class="sec">
-        <div class="sec-title">Mode</div>
-        <div class="seg">
-          <div class="sb" data-mode="mirror" data-cat="bluey">🐶 Bluey</div>
-          <div class="sb" data-mode="pond" data-cat="world">🌌 World</div>
-          <div class="sb" data-mode="bubbles" data-cat="game">🫧 Hand Games</div>
-        </div>
-      </div>
-      <div class="sec">
-        <div class="sec-title">Hand games</div>
+        <div class="sec-title">Hand Games</div>
         <div class="seg">
           <div class="sb" data-mode="bubbles" data-cat="game">🫧 Bubbles</div>
           <div class="sb" data-mode="fruits" data-cat="game">🍉 Fruits</div>
         </div>
       </div>
       <div class="sec">
-        <div class="sec-title">Particle worlds</div>
-        <div class="seg">
-          <div class="sb" data-mode="pond" data-cat="world">Pond</div>
-          <div class="sb" data-mode="flow" data-cat="world">Flow</div>
-          <div class="sb" data-mode="flow2" data-cat="world">Flow 2</div>
-          <div class="sb" data-mode="nebula" data-cat="world">Nebula</div>
-          <div class="sb" data-mode="storm" data-cat="world">Storm</div>
-          <div class="sb" data-mode="shatter" data-cat="world">Shatter</div>
-          <div class="sb" data-mode="earth" data-cat="world">Earth</div>
-          <div class="sb" data-mode="alien" data-cat="world">Alien</div>
+        <div class="sec-title">Players</div>
+        <div id="player-status" style="font-size:11px;color:rgba(255,255,255,.55);line-height:1.8">
+          <span id="p1-status">P1 —</span><br>
+          <span id="p2-status">P2 —</span>
         </div>
       </div>
       <button class="act" id="btn-home">⌂ Go Home</button>
@@ -327,16 +295,18 @@ $('disc').onclick = () => {
 // ── State sync from wall ──
 function handleState(msg) {
   if (!msg || msg.type !== 'state') return;
-  $('feed-info').textContent = `${msg.fps||'—'} fps · ${msg.handCount||0} hands · ${msg.peopleCount||0} people`;
+  $('feed-info').textContent = `${msg.fps||'—'} fps · ${msg.blobCount||0} players detected`;
   $('sw-mirror').classList.toggle('on', !!msg.mirror);
-  $('sw-holo').classList.toggle('on', !!msg.holo);
-  $('sw-back').classList.toggle('on', !!msg.trackingBack);
-  document.querySelectorAll('[data-quality]').forEach(b => b.classList.toggle('on', b.dataset.quality === msg.quality));
   document.querySelectorAll('[data-rot]').forEach(b => b.classList.toggle('on', parseInt(b.dataset.rot) === msg.rotation));
   document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === msg.mode));
-
-  // Camera facing — FIX: sync which camera is active
   document.querySelectorAll('[data-facing]').forEach(b => b.classList.toggle('on', b.dataset.facing === msg.facing));
+
+  // Player tracking status
+  const count = msg.blobCount || 0;
+  $('p1-status').textContent = count >= 1 ? 'P1 ✓ tracked (tallest)' : 'P1 — not detected';
+  $('p2-status').textContent = count >= 2 ? 'P2 ✓ tracked (shortest)' : 'P2 — not detected';
+  $('p1-status').style.color = count >= 1 ? '#50fa7b' : 'rgba(255,255,255,.35)';
+  $('p2-status').style.color = count >= 2 ? '#00e5ff' : 'rgba(255,255,255,.35)';
 
   // Perspective status
   if (msg.hasPerspective) {
@@ -347,7 +317,6 @@ function handleState(msg) {
     $('persp-status').textContent = 'No perspective calibration active';
   }
 
-  // Update selected corner indicator
   if (msg.perspCalibActive && msg.perspCorner !== undefined) {
     selectedCorner = msg.perspCorner;
     document.querySelectorAll('.cs').forEach(b => b.classList.toggle('on', parseInt(b.dataset.corner) === selectedCorner));
@@ -366,15 +335,8 @@ function mkSwitch(id, type) {
   sw.onclick = () => { sw.classList.toggle('on'); send({ type, value: sw.classList.contains('on') }); };
 }
 mkSwitch('sw-mirror', 'set-mirror');
-mkSwitch('sw-holo', 'set-holo');
-mkSwitch('sw-skel', 'set-skeleton');
-mkSwitch('sw-autovisit', 'set-autovisit');
-mkSwitch('sw-back', 'set-back');
 
-// Camera facing buttons — these now properly highlight via handleState
 document.querySelectorAll('[data-facing]').forEach(b => b.onclick = () => send({ type: 'set-facing', value: b.dataset.facing }));
-$('btn-calibrate-cam').onclick = () => send({ type: 'calibrate' });
-$('btn-calibrate').onclick = () => send({ type: 'calibrate' });
 $('btn-home').onclick = () => send({ type: 'go-home' });
 $('close-game-btn').onclick = () => send({ type: 'close-game' });
 
@@ -432,7 +394,7 @@ $('persp-save').onclick = () => send({ type: 'persp-save' });
 $('persp-reset').onclick = () => send({ type: 'persp-reset' });
 
 // ── Game grid ──
-const EMOJI = {blobz:'🔵',capy:'🐾',pusheen:'🐱',squishy:'🧸',sea:'🌊',char:'🎭',bluey:'🐶'};
+const EMOJI = {blobz:'🔵',capy:'🐾',pusheen:'🐱',squishy:'🧸',sea:'🌊',char:'🎭',nogyo:'🥷'};
 function gEmoji(n){const l=n.toLowerCase();for(const[k,v]of Object.entries(EMOJI))if(l.includes(k))return v;return'🎮';}
 
 let lastGameList = '';
