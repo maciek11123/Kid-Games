@@ -964,8 +964,15 @@ function launchGame(filename){
   activeGame=filename;
   gf.src='';
   gf.onload=()=>{
-    // Tell game external tracking is active — hide its own hand button
-    setTimeout(()=>sendToGame({type:'external-tracking',active:true}),300);
+    // Inject CSS to hide each game's own hand-tracking button
+    try{
+      const doc=gf.contentDocument||gf.contentWindow.document;
+      const style=doc.createElement('style');
+      style.textContent='#handBtn,#toggleCam,#webcamWrap,#webcamVideo{display:none!important}';
+      doc.head.appendChild(style);
+    }catch(e){}
+    // Also send postMessage for games that handle it
+    setTimeout(()=>sendToGame({type:'external-tracking',active:true}),200);
   };
   gf.src=filename;
   gw.style.display='block';
@@ -974,6 +981,7 @@ function launchGame(filename){
   currentCategory='launcher';
   statusEl.textContent='Loading pose…';statusEl.className='badge b-status loading';
   ensurePose().then(()=>{
+    startPoseLoop();
     statusEl.textContent='Tracking';statusEl.className='badge b-status';
   }).catch(()=>toast('Pose model failed — check internet'));
 }
