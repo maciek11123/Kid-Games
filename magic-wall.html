@@ -468,14 +468,22 @@ async function runPose(frame){
 // ═══════════════════════════════════
 //  MAIN PROCESS LOOP
 // ═══════════════════════════════════
+// Pose runs on its own interval (50ms = ~20fps) independent of render
+let poseInterval=null;
+function startPoseLoop(){
+  if(poseInterval)return;
+  poseInterval=setInterval(async()=>{
+    if(!camReady||videoElement.paused||videoElement.readyState<2)return;
+    if(currentCategory!=='game'&&currentCategory!=='launcher')return;
+    const frame=rotatedFrame();
+    if(frame) await runPose(frame);
+  },50);
+}
+function stopPoseLoop(){clearInterval(poseInterval);poseInterval=null;}
+
 function processLoop(){
   requestAnimationFrame(processLoop);
-  if(!camReady||videoElement.paused||videoElement.readyState<2)return;
-  if(videoElement.currentTime===lastVideoTime)return;
-  lastVideoTime=videoElement.currentTime;
-
-  const frame=rotatedFrame();
-  if(!frame)return;
+  if(!camReady)return;
 
   // Track FPS
   trackFrames++;
@@ -483,9 +491,6 @@ function processLoop(){
   if(now-trackFpsT>1000){trackFps=trackFrames;trackFrames=0;trackFpsT=now}
 
   if(currentCategory==='game'||currentCategory==='launcher'){
-    // Run pose async (non-blocking — uses last result if busy)
-    runPose(frame);
-
     // Update HUD
     handStatusEl.textContent=blobs.length===0?'Searching…':
       blobs.map((b,i)=>`${PLAYER_LABELS[i]}${b.height>0?' ✓':''}`).join(' · ');
@@ -506,13 +511,11 @@ function processLoop(){
   // Render
   frameCount++;
   const dt=(now-lastFrameTime)/1000;lastFrameTime=now;
-  const fps=Math.round(1/dt);
-  fpsEl.textContent=`${fps} fps · track ${trackFps}`;
-
-  animate(frame);
+  fpsEl.textContent=`${Math.round(1/dt)} fps · track ${trackFps}`;
+  animate();
 }
 
-function animate(frame){
+function animate(){
   hCtx.clearRect(0,0,W,H);
 
   if(currentCategory==='game'){
@@ -643,12 +646,14 @@ function setMode(mode,cat){
     if(uiVisible)$('game-ui').style.display='block';
     gameScore=0;scoreEl.innerText=0;entities=[];particles2D=[];
     statusEl.textContent='Loading pose…';statusEl.className='badge b-status loading';
-    ensurePose().catch(()=>toast('Pose model failed to load — check internet'));
+    ensurePose().then(()=>{startPoseLoop();statusEl.textContent='Tracking';statusEl.className='badge b-status';})
+      .catch(()=>toast('Pose model failed to load — check internet'));
   }
   if(cat==='launcher'){
     gameCanvas.style.display='none';$('game-ui').style.display='none';
     statusEl.textContent='Loading pose…';statusEl.className='badge b-status loading';
-    ensurePose().catch(()=>toast('Pose model failed to load — check internet'));
+    ensurePose().then(()=>{startPoseLoop();statusEl.textContent='Tracking';statusEl.className='badge b-status';})
+      .catch(()=>toast('Pose model failed to load — check internet'));
   }
   pokeIdle();
 }
@@ -659,6 +664,7 @@ function goHome(){
   showDocks('home');
   gameCanvas.style.display='none';$('game-ui').style.display='none';
   blobs=[];handStatusEl.textContent='—';
+  stopPoseLoop();
   showUI(true);
   if(activeGame)closeGame();
 }
@@ -956,12 +962,20 @@ const gpTimers={};
 
 function launchGame(filename){
   activeGame=filename;
+  gf.src='';
+  gf.onload=()=>{
+    // Tell game external tracking is active — hide its own hand button
+    setTimeout(()=>sendToGame({type:'external-tracking',active:true}),300);
+  };
   gf.src=filename;
   gw.style.display='block';
   gb.style.display='block';
   $('gdock').style.zIndex='100';
   currentCategory='launcher';
-  statusEl.textContent='Tracking';statusEl.className='badge b-status';
+  statusEl.textContent='Loading pose…';statusEl.className='badge b-status loading';
+  ensurePose().then(()=>{
+    statusEl.textContent='Tracking';statusEl.className='badge b-status';
+  }).catch(()=>toast('Pose model failed — check internet'));
 }
 function closeGame(){
   gw.style.display='none';
@@ -986,7 +1000,9 @@ $('card-launcher').onclick=()=>{
   currentCategory='launcher';
   $('gdock').style.display='flex';
   gameCanvas.style.display='none';$('game-ui').style.display='none';
-  statusEl.textContent='Pick a game';statusEl.className='badge b-status loading';
+  statusEl.textContent='Loading pose…';statusEl.className='badge b-status loading';
+  ensurePose().then(()=>{startPoseLoop();statusEl.textContent='Pick a game';statusEl.className='badge b-status';})
+    .catch(()=>toast('Pose model failed to load — check internet'));
 };
 ['bubbles','fruits'].forEach(m=>$('btn-'+m).onclick=()=>setMode(m,'game'));
 
