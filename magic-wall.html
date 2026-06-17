@@ -98,24 +98,6 @@ video#cam.cam-on{opacity:1}
 .switch.on{background:rgba(0,229,255,.5)}
 .switch.on::after{left:21px}
 
-/* skin calibration */
-#skin-calib{position:fixed;inset:0;z-index:300;background:rgba(3,4,10,.94);display:none;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;text-align:center}
-#skin-calib.show{display:flex}
-#skin-calib h2{font-family:'Baloo 2',sans-serif;font-weight:800;font-size:clamp(22px,4vw,36px)}
-#skin-calib p{font-size:13px;color:rgba(255,255,255,.55);max-width:500px;line-height:1.6}
-#skin-video-wrap{position:relative;width:min(480px,85vw);aspect-ratio:4/3;border-radius:14px;overflow:hidden;border:2px solid rgba(0,229,255,.4);background:#000;cursor:crosshair}
-#skin-video-wrap video{width:100%;height:100%;object-fit:cover;display:block}
-#skin-video-wrap canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-#skin-preview-swatch{width:60px;height:60px;border-radius:50%;border:3px solid rgba(255,255,255,.3);display:block;margin:0 auto;background:#888}
-.skin-row{display:flex;align-items:center;gap:12px;width:min(480px,85vw)}
-.skin-row label{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,.4);white-space:nowrap;width:70px}
-.skin-row input[type=range]{flex:1;accent-color:var(--cyan);cursor:pointer}
-.skin-row span{font-size:11px;color:var(--cyan);width:30px;text-align:right}
-#skin-blob-preview{width:min(480px,85vw);height:80px;border-radius:10px;background:#000;border:1px solid var(--line);overflow:hidden;position:relative}
-#skin-blob-preview canvas{width:100%;height:100%}
-#skin-blob-label{position:absolute;top:6px;left:10px;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(0,229,255,.5)}
-#skin-calib-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
-
 /* perspective calib overlay */
 #persp-overlay{position:fixed;inset:0;z-index:310;display:none;background:#000}
 #persp-overlay.show{display:block}
@@ -180,7 +162,6 @@ video#cam.cam-on{opacity:1}
   </div>
   <div id="home-setup">
     <span class="cam-state" id="home-cam-state">Camera: <b>starting…</b></span>
-    <button class="pill-btn" id="btn-skin-home">🎨 Calibrate Skin</button>
     <button class="pill-btn ghost" id="btn-remote-home">📡 Remote</button>
     <button class="pill-btn ghost" id="btn-settings-home">Settings</button>
   </div>
@@ -208,37 +189,13 @@ video#cam.cam-on{opacity:1}
     <label class="row">Mirror image <div class="switch" id="sw-mirror"></div></label>
   </div>
   <div class="sec">
-    <div class="sec-title">Skin Tracking</div>
-    <button class="pill-btn" id="btn-skin-drawer" style="width:100%">🎨 Calibrate Skin Color</button>
+    <div class="sec-title">Tracking</div>
+    <div style="font-size:10px;color:rgba(255,255,255,.45);line-height:1.6">MoveNet MultiPose · up to 2 players<br>Tallest body = P1 · shortest = P2<br>Tracks raised wrist as cursor</div>
     <button class="pill-btn ghost" id="btn-persp-drawer" style="width:100%;margin-top:6px">📐 Perspective Map</button>
   </div>
   <div class="sec">
     <div class="sec-title">Shortcuts</div>
     <label class="row"><span>F fullscreen · H hide UI · S skin · Esc home</span></label>
-  </div>
-</div>
-
-<!-- skin calibration -->
-<div id="skin-calib">
-  <h2>Skin Color Calibration</h2>
-  <p>Tap your hand in the video to sample skin tone. Adjust tolerance until only your hands show as white in the preview.</p>
-  <div id="skin-video-wrap">
-    <video id="skin-vid" autoplay playsinline muted></video>
-    <canvas id="skin-overlay"></canvas>
-  </div>
-  <div id="skin-preview-swatch"></div>
-  <div class="skin-row">
-    <label>Tolerance</label>
-    <input type="range" id="skin-tol" min="10" max="80" value="30">
-    <span id="skin-tol-val">30</span>
-  </div>
-  <div id="skin-blob-preview">
-    <canvas id="skin-blob-canvas"></canvas>
-    <div id="skin-blob-label">MASK PREVIEW</div>
-  </div>
-  <div id="skin-calib-actions">
-    <button class="pill-btn" id="skin-save">✓ Save & Use</button>
-    <button class="pill-btn ghost" id="skin-cancel">Cancel</button>
   </div>
 </div>
 
@@ -305,18 +262,19 @@ const store={
 camRotation=store.get('rotation',0);
 mirrorX=store.get('mirror',true);
 
-// skin tracking state
-let skinH=store.get('skinH',15),skinS=store.get('skinS',0.3),skinV=store.get('skinV',0.6);
-let skinTol=store.get('skinTol',30);
-
 // perspective
 let perspCorners=store.get('perspCorners',null);
 let perspMatrix=null;
 if(perspCorners) perspMatrix=computeHomographyMatrix(perspCorners);
 
-// blob tracking state
-let blobs=[];  // up to 2: [{x,y,r,pid}]
+// pose tracking state
+let blobs=[];  // up to 2: [{cx,cy,pid,height}] — wrist positions from MoveNet
 const BLOB_COLORS=['#00e5ff','#50fa7b'];
+const PLAYER_LABELS=['P1','P2'];
+let poseDetector=null,poseLoading=null,poseBusy=false;
+// Smoothing buffers per player
+const smooth=[{x:0.5,y:0.5},{x:0.5,y:0.5}];
+const SMOOTH_A=0.35; // lerp factor — higher = more responsive, lower = smoother
 
 function toast(msg,ms=2200){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove('show'),ms)}
 
@@ -326,10 +284,6 @@ function toast(msg,ms=2200){const t=$('toast');t.textContent=msg;t.classList.add
 let activeStream=null,camReady=false,isProcessing=false,lastVideoTime=-1,currentDeviceId=null,currentFacing='user';
 const processCanvas=document.createElement('canvas');
 const processCtx=processCanvas.getContext('2d',{willReadFrequently:true});
-// small blob canvas for fast analysis
-const blobCanvas=document.createElement('canvas');
-blobCanvas.width=160;blobCanvas.height=120;
-const blobCtx=blobCanvas.getContext('2d',{willReadFrequently:true});
 
 async function listCameras(){
   const devs=await navigator.mediaDevices.enumerateDevices();
@@ -377,9 +331,7 @@ async function startCam(opt={}){
   currentFacing=facing||opt.facing||'user';
   if(facing&&!store.get('mirrorLocked',false)){setMirror(facing!=='environment',false)}
   videoElement.srcObject=activeStream;
-  // also feed skin calibration video
-  $('skin-vid').srcObject=activeStream;
-  try{await videoElement.play();await $('skin-vid').play()}catch(e){}
+  try{await videoElement.play()}catch(e){}
   camReady=true;
   $('home-cam-state').innerHTML=`Camera: <b>${(track.label||'ready').slice(0,34)}</b>`;
   statusEl.textContent='Ready';statusEl.className='badge b-status';
@@ -424,76 +376,93 @@ function setMirror(on,lock=true){
 }
 
 // ═══════════════════════════════════
-//  HSV SKIN BLOB TRACKING
+//  MOVENET MULTIPOSE TRACKING
 // ═══════════════════════════════════
-function rgbToHsv(r,g,b){
-  r/=255;g/=255;b/=255;
-  const max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min;
-  let h=0,s=max===0?0:d/max,v=max;
-  if(d>0){
-    if(max===r) h=((g-b)/d)%6;
-    else if(max===g) h=(b-r)/d+2;
-    else h=(r-g)/d+4;
-    h/=6;if(h<0)h+=1;
-  }
-  return [h,s,v];
+// Keypoint indices (MoveNet): 9=left wrist, 10=right wrist, 5=left shoulder, 6=right shoulder
+const KP_LWRIST=9,KP_RWRIST=10,KP_LSHOULDER=5,KP_RSHOULDER=6,KP_NOSE=0;
+const MIN_KP_SCORE=0.2;
+
+async function ensurePose(){
+  if(poseDetector) return poseDetector;
+  if(poseLoading) return poseLoading;
+  poseLoading=(async()=>{
+    statusEl.textContent='Loading pose…';statusEl.className='badge b-status loading';
+    // Load TF.js + MoveNet
+    await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.11.0/dist/tf-core.min.js');
+    await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.11.0/dist/tf-backend-webgl.min.js');
+    await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js');
+    await tf.setBackend('webgl');
+    await tf.ready();
+    poseDetector=await poseDetection.createDetector(
+      poseDetection.SupportedModels.MoveNet,
+      {modelType:poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING,enableSmoothing:false,minPoseScore:0.15}
+    );
+    statusEl.textContent='Ready';statusEl.className='badge b-status';
+    return poseDetector;
+  })();
+  return poseLoading;
 }
 
-function isSkin(r,g,b,h,s,v,tol){
-  // tol is 10-80 → convert to HSV deltas
-  const dH=tol*0.003, dS=tol*0.012, dV=tol*0.015;
-  const dh=Math.min(Math.abs(h-skinH/360),1-Math.abs(h-skinH/360));
-  return dh<dH && Math.abs(s-skinS)<dS && Math.abs(v-skinV)<dV;
+function loadScript(src){
+  return new Promise((res,rej)=>{
+    if(document.querySelector(`script[src="${src}"]`)) return res();
+    const s=document.createElement('script');s.src=src;s.crossOrigin='anonymous';
+    s.onload=res;s.onerror=()=>rej(new Error('load fail '+src));
+    document.head.appendChild(s);
+  });
 }
 
-function detectBlobs(frame){
-  blobCtx.save();
-  if(mirrorX){blobCtx.translate(160,0);blobCtx.scale(-1,1)}
-  blobCtx.drawImage(frame,0,0,160,120);
-  blobCtx.restore();
-  const data=blobCtx.getImageData(0,0,160,120).data;
-  const tol=skinTol;
+// Get bounding box height of a pose (shoulder-to-nose span as size proxy)
+function poseHeight(pose){
+  const kps=pose.keypoints;
+  let minY=Infinity,maxY=-Infinity;
+  [KP_NOSE,KP_LSHOULDER,KP_RSHOULDER,KP_LWRIST,KP_RWRIST].forEach(i=>{
+    if(kps[i]&&kps[i].score>MIN_KP_SCORE){minY=Math.min(minY,kps[i].y);maxY=Math.max(maxY,kps[i].y)}
+  });
+  return maxY===minY ? 0 : maxY-minY;
+}
 
-  // Build mask + find labeled regions via simple flood approach
-  // Use fast connected components via scan-line union-find
-  const mask=new Uint8Array(160*120);
-  for(let i=0;i<160*120;i++){
-    const p=i*4;
-    const [h,s,v]=rgbToHsv(data[p],data[p+1],data[p+2]);
-    if(isSkin(data[p],data[p+1],data[p+2],h,s,v,tol)) mask[i]=1;
-  }
+// Get best wrist position from a pose (highest-confidence wrist, or average of both)
+function poseWrist(pose,dim){
+  const kps=pose.keypoints;
+  const lw=kps[KP_LWRIST],rw=kps[KP_RWRIST];
+  const lOk=lw&&lw.score>MIN_KP_SCORE, rOk=rw&&rw.score>MIN_KP_SCORE;
+  let nx,ny;
+  if(lOk&&rOk){
+    // Use highest wrist (lowest y = higher on screen = more likely raised hand)
+    if(lw.y<rw.y){nx=lw.x/dim.w;ny=lw.y/dim.h}
+    else{nx=rw.x/dim.w;ny=rw.y/dim.h}
+  } else if(lOk){nx=lw.x/dim.w;ny=lw.y/dim.h}
+  else if(rOk){nx=rw.x/dim.w;ny=rw.y/dim.h}
+  else return null;
+  // Mirror if needed
+  if(mirrorX) nx=1-nx;
+  return {cx:nx,cy:ny};
+}
 
-  // Simple blob extraction: find largest connected groups via scan-line
-  const label=new Int32Array(160*120).fill(-1);
-  const parent=[];
-  function find(x){while(parent[x]!==x)x=parent[x]=parent[parent[x]];return x}
-  function unite(a,b){a=find(a);b=find(b);if(a!==b)parent[b]=a}
-  let nextLabel=0;
-  for(let y=0;y<120;y++){
-    for(let x=0;x<160;x++){
-      const i=y*160+x;
-      if(!mask[i])continue;
-      const left=x>0&&mask[i-1]?label[i-1]:-1;
-      const up=y>0&&mask[i-160]?label[i-160]:-1;
-      if(left<0&&up<0){label[i]=nextLabel;parent.push(nextLabel);nextLabel++}
-      else if(left>=0&&up<0){label[i]=left}
-      else if(left<0&&up>=0){label[i]=up}
-      else{label[i]=left;unite(left,up)}
-    }
-  }
-  // Collect sums per root label
-  const sx={},sy={},sc={};
-  for(let i=0;i<160*120;i++){
-    if(label[i]<0)continue;
-    const r=find(label[i]);
-    if(!sc[r]){sx[r]=0;sy[r]=0;sc[r]=0}
-    sx[r]+=(i%160);sy[r]+=Math.floor(i/160);sc[r]++;
-  }
-  // Sort by size, keep top 2, filter noise
-  const entries=Object.keys(sc).map(r=>({r:+r,cx:sx[r]/sc[r]/160,cy:sy[r]/sc[r]/120,size:sc[r]}));
-  entries.sort((a,b)=>b.size-a.size);
-  const minSize=30; // min pixels at 160x120
-  return entries.filter(e=>e.size>minSize).slice(0,2);
+async function runPose(frame){
+  if(!poseDetector||poseBusy)return;
+  poseBusy=true;
+  try{
+    const dim=srcDims();
+    const poses=await poseDetector.estimatePoses(frame,{maxPoses:2,flipHorizontal:false});
+    if(!poses||!poses.length){blobs=[];poseBusy=false;return}
+
+    // Sort by height descending: tallest = P1 (Charlie/older), shortest = P2 (toddler)
+    const sorted=[...poses].sort((a,b)=>poseHeight(b)-poseHeight(a));
+
+    const newBlobs=[];
+    sorted.slice(0,2).forEach((pose,pi)=>{
+      const w=poseWrist(pose,dim);
+      if(!w)return;
+      // Smooth
+      smooth[pi].x+=(w.cx-smooth[pi].x)*SMOOTH_A;
+      smooth[pi].y+=(w.cy-smooth[pi].y)*SMOOTH_A;
+      newBlobs.push({cx:smooth[pi].x,cy:smooth[pi].y,pid:pi,height:poseHeight(pose)});
+    });
+    blobs=newBlobs;
+  }catch(e){console.warn('pose err',e)}
+  poseBusy=false;
 }
 
 // ═══════════════════════════════════
@@ -514,19 +483,22 @@ function processLoop(){
   if(now-trackFpsT>1000){trackFps=trackFrames;trackFrames=0;trackFpsT=now}
 
   if(currentCategory==='game'||currentCategory==='launcher'){
-    blobs=detectBlobs(frame);
+    // Run pose async (non-blocking — uses last result if busy)
+    runPose(frame);
+
     // Update HUD
-    handStatusEl.textContent=blobs.length===0?'No hands':blobs.length===1?'1 hand':'2 hands';
+    handStatusEl.textContent=blobs.length===0?'Searching…':
+      blobs.map((b,i)=>`${PLAYER_LABELS[i]}${b.height>0?' ✓':''}`).join(' · ');
 
     // Send to iframe games
     if(currentCategory==='launcher'&&activeGame){
       blobs.forEach((b,i)=>{
         let x=b.cx,y=b.cy;
         if(perspMatrix){const pp=applyPersp(x,y);x=pp.x;y=pp.y}
-        const ptId=`blob-${i}`;
+        const ptId=`pose-${i}`;
         sendToGame({type:'pointer',id:ptId,x,y});
         clearTimeout(gpTimers[ptId]);
-        gpTimers[ptId]=setTimeout(()=>sendToGame({type:'pointer-up',id:ptId}),200);
+        gpTimers[ptId]=setTimeout(()=>sendToGame({type:'pointer-up',id:ptId}),300);
       });
     }
   }
@@ -535,7 +507,7 @@ function processLoop(){
   frameCount++;
   const dt=(now-lastFrameTime)/1000;lastFrameTime=now;
   const fps=Math.round(1/dt);
-  fpsEl.textContent=`${fps} fps`;
+  fpsEl.textContent=`${fps} fps · track ${trackFps}`;
 
   animate(frame);
 }
@@ -547,16 +519,22 @@ function animate(frame){
     drawGameFrame();
   }
 
-  // draw blob cursors on hud
+  // draw pose cursors on hud
   if((currentCategory==='game'||currentCategory==='launcher')&&blobs.length){
     blobs.forEach((b,i)=>{
       let x=b.cx*W,y=b.cy*H;
       if(perspMatrix){const pp=applyPersp(b.cx,b.cy);x=pp.x*W;y=pp.y*H}
       const col=BLOB_COLORS[i]||'#fff';
-      hCtx.beginPath();hCtx.arc(x,y,22,0,Math.PI*2);
-      hCtx.strokeStyle=col;hCtx.lineWidth=3;hCtx.globalAlpha=0.85;hCtx.stroke();
-      hCtx.beginPath();hCtx.arc(x,y,4,0,Math.PI*2);
-      hCtx.fillStyle=col;hCtx.fill();
+      // outer ring
+      hCtx.beginPath();hCtx.arc(x,y,24,0,Math.PI*2);
+      hCtx.strokeStyle=col;hCtx.lineWidth=3;hCtx.globalAlpha=0.8;hCtx.stroke();
+      // center dot
+      hCtx.beginPath();hCtx.arc(x,y,5,0,Math.PI*2);
+      hCtx.fillStyle=col;hCtx.globalAlpha=1;hCtx.fill();
+      // player label
+      hCtx.font='bold 11px JetBrains Mono,monospace';
+      hCtx.fillStyle=col;hCtx.textAlign='center';hCtx.textBaseline='top';
+      hCtx.fillText(PLAYER_LABELS[i],x,y+30);
       hCtx.globalAlpha=1;
     });
   }
@@ -564,7 +542,8 @@ function animate(frame){
   if(showDebug){
     const d=$('debug');
     d.style.display='block';
-    d.textContent=`mode: ${currentCategory}/${currentMode}\ntrack: ${trackFps} fps\nblobs: ${blobs.length}\nskin H:${skinH} S:${skinS.toFixed(2)} V:${skinV.toFixed(2)} tol:${skinTol}`;
+    d.textContent=`mode: ${currentCategory}/${currentMode}\ntrack: ${trackFps} fps\nplayers: ${blobs.length}\n`+
+      blobs.map((b,i)=>`${PLAYER_LABELS[i]}: x=${b.cx.toFixed(2)} y=${b.cy.toFixed(2)} h=${Math.round(b.height)}`).join('\n');
   }
 }
 
@@ -663,11 +642,13 @@ function setMode(mode,cat){
     gameCanvas.style.display='block';
     if(uiVisible)$('game-ui').style.display='block';
     gameScore=0;scoreEl.innerText=0;entities=[];particles2D=[];
-    statusEl.textContent='Tracking';statusEl.className='badge b-status';
+    statusEl.textContent='Loading pose…';statusEl.className='badge b-status loading';
+    ensurePose().catch(()=>toast('Pose model failed to load — check internet'));
   }
   if(cat==='launcher'){
     gameCanvas.style.display='none';$('game-ui').style.display='none';
-    statusEl.textContent='Tracking';statusEl.className='badge b-status';
+    statusEl.textContent='Loading pose…';statusEl.className='badge b-status loading';
+    ensurePose().catch(()=>toast('Pose model failed to load — check internet'));
   }
   pokeIdle();
 }
@@ -702,110 +683,9 @@ document.addEventListener('pointermove',pokeIdle);
 document.addEventListener('keydown',e=>{
   if(e.key==='f'||e.key==='F'){document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen().catch(()=>{})}
   if(e.key==='h'||e.key==='H'){showUI(!uiVisible)}
-  if(e.key==='s'||e.key==='S'){openSkinCalib()}
   if(e.key==='d'||e.key==='D'){showDebug=!showDebug;$('debug').style.display=showDebug?'block':'none'}
   if(e.key==='Escape'){goHome()}
 });
-
-// ═══════════════════════════════════
-//  SKIN CALIBRATION UI
-// ═══════════════════════════════════
-let skinCalibActive=false,skinCalibStream=null;
-const skinVid=$('skin-vid');
-const skinOverlay=$('skin-overlay');
-const skinBlobCanvas=$('skin-blob-canvas');
-const skinBlobCtx=skinBlobCanvas.getContext('2d',{willReadFrequently:true});
-const skinOvCtx=skinOverlay.getContext('2d');
-
-function openSkinCalib(){
-  skinCalibActive=true;
-  $('skin-calib').classList.add('show');
-  $('skin-tol').value=skinTol;
-  $('skin-tol-val').textContent=skinTol;
-  updateSwatch();
-  skinCalibLoop();
-}
-
-function closeSkinCalib(save){
-  skinCalibActive=false;
-  $('skin-calib').classList.remove('show');
-  if(save){
-    store.set('skinH',skinH);store.set('skinS',skinS);store.set('skinV',skinV);store.set('skinTol',skinTol);
-    toast('✓ Skin color saved');
-  }
-}
-
-function updateSwatch(){
-  // convert HSV to RGB for swatch
-  const h=skinH/360,s=skinS,v=skinV;
-  const i=Math.floor(h*6),f=h*6-i,p=v*(1-s),q=v*(1-f*s),t=v*(1-(1-f)*s);
-  let r,g,b;
-  switch(i%6){case 0:r=v;g=t;b=p;break;case 1:r=q;g=v;b=p;break;case 2:r=p;g=v;b=t;break;case 3:r=p;g=q;b=v;break;case 4:r=t;g=p;b=v;break;case 5:r=v;g=p;b=q;break}
-  $('skin-preview-swatch').style.background=`rgb(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)})`;
-}
-
-function skinCalibLoop(){
-  if(!skinCalibActive)return;
-  requestAnimationFrame(skinCalibLoop);
-  if(skinVid.readyState<2)return;
-
-  const vw=skinVid.videoWidth,vh=skinVid.videoHeight;
-  if(!vw)return;
-
-  // draw video to overlay canvas (mirrored if needed)
-  skinOverlay.width=skinVid.offsetWidth*2;skinOverlay.height=skinVid.offsetHeight*2;
-  skinOvCtx.save();
-  if(mirrorX){skinOvCtx.translate(skinOverlay.width,0);skinOvCtx.scale(-1,1)}
-  skinOvCtx.drawImage(skinVid,0,0,skinOverlay.width,skinOverlay.height);
-  skinOvCtx.restore();
-
-  // blob mask preview
-  const bw=skinBlobCanvas.offsetWidth*2||480,bh=80;
-  skinBlobCanvas.width=bw;skinBlobCanvas.height=bh;
-  skinBlobCtx.drawImage(skinVid,0,0,bw,bh);
-  const imgd=skinBlobCtx.getImageData(0,0,bw,bh);
-  const d=imgd.data;
-  const tol=+$('skin-tol').value;
-  for(let i=0;i<bw*bh;i++){
-    const p=i*4;
-    const [hh,ss,vv]=rgbToHsv(d[p],d[p+1],d[p+2]);
-    const dH=tol*0.003,dS=tol*0.012,dV=tol*0.015;
-    const dh=Math.min(Math.abs(hh-skinH/360),1-Math.abs(hh-skinH/360));
-    const match=dh<dH&&Math.abs(ss-skinS)<dS&&Math.abs(vv-skinV)<dV;
-    if(match){d[p]=0;d[p+1]=255;d[p+2]=120;d[p+3]=220}
-    else{d[p]=d[p+1]=d[p+2]=30;d[p+3]=200}
-  }
-  skinBlobCtx.putImageData(imgd,0,0);
-}
-
-// tap on video to sample skin color
-$('skin-video-wrap').addEventListener('pointerdown',e=>{
-  const rect=e.currentTarget.getBoundingClientRect();
-  const px=(e.clientX-rect.left)/rect.width;
-  const py=(e.clientY-rect.top)/rect.height;
-  // sample from the raw video
-  const sc=document.createElement('canvas');sc.width=4;sc.height=4;
-  const sx=sc.getContext('2d',{willReadFrequently:true});
-  const vw=skinVid.videoWidth,vh=skinVid.videoHeight;
-  let spx=mirrorX?(1-px):px;
-  sx.drawImage(skinVid,spx*vw-2,py*vh-2,4,4,0,0,4,4);
-  const d=sx.getImageData(0,0,4,4).data;
-  let rr=0,gg=0,bb=0;
-  for(let i=0;i<16;i++){rr+=d[i*4];gg+=d[i*4+1];bb+=d[i*4+2]}
-  rr/=16;gg/=16;bb/=16;
-  const [h,s,v]=rgbToHsv(rr,gg,bb);
-  skinH=Math.round(h*360);skinS=+s.toFixed(3);skinV=+v.toFixed(3);
-  updateSwatch();
-  // flash dot on overlay
-  skinOvCtx.beginPath();skinOvCtx.arc(px*skinOverlay.width,py*skinOverlay.height,16,0,Math.PI*2);
-  skinOvCtx.strokeStyle='#fff';skinOvCtx.lineWidth=3;skinOvCtx.stroke();
-});
-
-$('skin-tol').oninput=e=>{skinTol=+e.target.value;$('skin-tol-val').textContent=skinTol};
-$('skin-save').onclick=()=>closeSkinCalib(true);
-$('skin-cancel').onclick=()=>closeSkinCalib(false);
-$('btn-skin-home').onclick=openSkinCalib;
-$('btn-skin-drawer').onclick=()=>{$('drawer').classList.remove('open');openSkinCalib()};
 
 // ═══════════════════════════════════
 //  PERSPECTIVE CALIBRATION
@@ -1015,7 +895,7 @@ function handleRemoteCommand(msg){
     case 'go-home':      goHome();break;
     case 'launch-game':  launchGame(msg.url);break;
     case 'close-game':   closeGame();break;
-    case 'skin-calib':   openSkinCalib();break;
+    case 'skin-calib':   toast('Skin calib removed — using pose tracking');break;
     case 'persp-open':   openPerspCalib();break;
     case 'persp-close':  closePerspCalib(false);break;
     case 'persp-save':   closePerspCalib(true);break;
