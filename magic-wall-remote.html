@@ -111,8 +111,9 @@ html,body{height:100%;background:var(--ink);color:#fff;font-family:'JetBrains Mo
   <div id="tabs">
     <div class="tab on" data-tab="games">🎮 Games</div>
     <div class="tab" data-tab="detect">👁 Detect</div>
-    <div class="tab" data-tab="cam">📷 Camera</div>
+
     <div class="tab" data-tab="wall">🌌 Wall</div>
+    <div class="tab" data-tab="source">⚡ Kinect</div>
   </div>
   <div id="panels">
 
@@ -132,64 +133,45 @@ html,body{height:100%;background:var(--ink);color:#fff;font-family:'JetBrains Mo
     </div>
 
     <!-- CAMERA -->
-    <div class="page" id="tab-cam">
-      <div class="sec">
-        <div class="sec-title">Camera source</div>
-        <div class="seg">
-          <div class="sb" id="btn-face-front" data-facing="user">📱 Front / Selfie</div>
-          <div class="sb" id="btn-face-back" data-facing="environment">🎥 Back / Room</div>
-        </div>
-      </div>
-      <div class="sec">
-        <div class="sec-title">Orientation</div>
-        <div class="seg">
-          <div class="sb on" data-rot="0">0°</div>
-          <div class="sb" data-rot="90">90°</div>
-          <div class="sb" data-rot="180">180°</div>
-          <div class="sb" data-rot="270">270°</div>
-        </div>
-      </div>
-      <div class="sec">
-        <div class="sec-title">Image</div>
-        <label class="row">Mirror <div class="sw" id="sw-mirror"></div></label>
-      </div>
-      <!-- Perspective Calibration -->
-      <button class="act" id="btn-persp-toggle" style="border-color:rgba(190,120,255,.3);color:var(--violet);margin-top:2px">⧉ Perspective Calibration</button>
 
-      <div id="persp-panel">
-        <div class="persp-status" id="persp-status">No perspective calibration active</div>
-        <div class="sec">
-          <div class="sec-title">Select corner</div>
-          <div class="corner-sel">
-            <button class="cs on" data-corner="0">↖ Top-Left</button>
-            <button class="cs" data-corner="1">↗ Top-Right</button>
-            <button class="cs" data-corner="2">↘ Bottom-Left</button>
-            <button class="cs" data-corner="3">↙ Bottom-Right</button>
-          </div>
+    <div class="page" id="tab-source">
+      <div class="sec">
+        <div class="sec-title">Kinect Status</div>
+        <div id="kinect-status" style="font-size:12px;font-weight:700;margin-bottom:4px">○ disconnected</div>
+        <div style="font-size:9px;color:rgba(255,255,255,.3);line-height:1.6">Auto-reconnects every 3s</div>
+      </div>
+      <div class="sec">
+        <div class="sec-title">Bridge Host</div>
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <input id="kinect-host" type="text" value="localhost" placeholder="IP or localhost"
+            style="flex:1;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:6px;padding:6px 8px;font-size:11px;font-family:inherit">
+          <button class="btn" id="btn-kinect-connect" style="white-space:nowrap">Connect</button>
         </div>
-        <div class="sec">
-          <div class="sec-title">Nudge selected corner</div>
-          <div class="dpad">
-            <div class="blank"></div>
-            <button data-dir="up">▲</button>
-            <div class="blank"></div>
-            <button data-dir="left">◀</button>
-            <button data-dir="fine" style="font-size:9px;letter-spacing:1px">FINE</button>
-            <button data-dir="right">▶</button>
-            <div class="blank"></div>
-            <button data-dir="down">▼</button>
-            <div class="blank"></div>
-          </div>
-          <div style="font-size:8px;color:rgba(255,255,255,.25);text-align:center;letter-spacing:1px;margin-top:2px">Hold FINE then tap arrow for small steps</div>
+        <div style="font-size:9px;color:rgba(255,255,255,.3);line-height:1.6">
+          Run KinectBridge.exe as Admin on the Galaxy Book S first.<br>
+          Enter its IP if connecting over WiFi.
         </div>
-        <div class="persp-actions">
-          <button class="act" id="persp-save" style="border-color:rgba(80,250,123,.3);color:var(--grass)">✓ Save</button>
-          <button class="act" id="persp-reset" style="border-color:rgba(255,100,100,.3);color:var(--coral)">↺ Reset</button>
-        </div>
+      </div>
+      <div class="sec">
+        <div class="sec-title">Kinect Calibration</div>
+        <label class="row" style="font-size:10px">X Offset <span id="kx-off-val">0.00</span>
+          <input type="range" id="kx-off" min="-1" max="1" step="0.01" value="0" style="width:80px;accent-color:var(--cyan)">
+        </label>
+        <label class="row" style="font-size:10px">Y Offset <span id="ky-off-val">0.00</span>
+          <input type="range" id="ky-off" min="-1" max="1" step="0.01" value="0" style="width:80px;accent-color:var(--cyan)">
+        </label>
+        <label class="row" style="font-size:10px">X Scale <span id="kx-sc-val">1.00</span>
+          <input type="range" id="kx-sc" min="0.3" max="3" step="0.05" value="1" style="width:80px;accent-color:var(--cyan)">
+        </label>
+        <label class="row" style="font-size:10px">Y Scale <span id="ky-sc-val">1.00</span>
+          <input type="range" id="ky-sc" min="0.3" max="3" step="0.05" value="1" style="width:80px;accent-color:var(--cyan)">
+        </label>
+        <label class="row" style="font-size:10px">Wall Z (m) <span id="kwall-val">1.50</span>
+          <input type="range" id="kwall-z" min="0.5" max="4" step="0.05" value="1.5" style="width:80px;accent-color:var(--cyan)">
+        </label>
       </div>
     </div>
 
-    <!-- WALL -->
     <div class="page" id="tab-wall">
       <div class="sec">
         <div class="sec-title">Hand Games</div>
@@ -323,11 +305,22 @@ function handleState(msg) {
   }
 
   buildGameGrid(msg.games, msg.activeGame);
+  if(msg.kinectConnected!==undefined){
+    const ks=$('kinect-status');
+    if(ks){ks.textContent=msg.kinectConnected?'● connected':'○ disconnected';
+    ks.style.color=msg.kinectConnected?'#50fa7b':'#ff4466';}
+  }
+  if(msg.kinectCal){
+    const kc=msg.kinectCal;
+    const setSlider=(id,val,vid)=>{const el=$(id);if(el){el.value=val;const d=$(vid);if(d)d.textContent=parseFloat(val).toFixed(2);}};
+    setSlider('kx-off',kc.xOff,'kx-off-val');setSlider('ky-off',kc.yOff,'ky-off-val');
+    setSlider('kx-sc',kc.xSc,'kx-sc-val');setSlider('ky-sc',kc.ySc,'ky-sc-val');
+    setSlider('kwall-z',kc.wallZ,'kwall-val');
+  }
 }
 
 // ── Controls ──
-document.querySelectorAll('[data-rot]').forEach(b => b.onclick = () => send({ type: 'set-rotation', value: parseInt(b.dataset.rot) }));
-document.querySelectorAll('[data-quality]').forEach(b => b.onclick = () => send({ type: 'set-quality', value: b.dataset.quality }));
+
 document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => send({ type: 'set-mode', mode: b.dataset.mode, category: b.dataset.cat }));
 
 function mkSwitch(id, type) {
@@ -336,7 +329,7 @@ function mkSwitch(id, type) {
 }
 mkSwitch('sw-mirror', 'set-mirror');
 
-document.querySelectorAll('[data-facing]').forEach(b => b.onclick = () => send({ type: 'set-facing', value: b.dataset.facing }));
+
 $('btn-home').onclick = () => send({ type: 'go-home' });
 $('close-game-btn').onclick = () => send({ type: 'close-game' });
 
@@ -472,6 +465,27 @@ $('guide-close').onclick = () => $('install-guide').classList.remove('open');
 
 // PWA service worker
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{})}
+
+// ── Kinect tab ──
+const btnKC=$('btn-kinect-connect');
+if(btnKC) btnKC.onclick=()=>{
+  const host=($('kinect-host').value||'localhost').trim();
+  send({type:'kinect-connect',host});
+};
+function kinectCalSend(){
+  send({type:'kinect-cal',cal:{
+    xOff:parseFloat($('kx-off').value||0),
+    yOff:parseFloat($('ky-off').value||0),
+    xSc: parseFloat($('kx-sc').value||1),
+    ySc: parseFloat($('ky-sc').value||1),
+    wallZ:parseFloat($('kwall-z').value||1.5),
+  }});
+}
+[['kx-off','kx-off-val'],['ky-off','ky-off-val'],['kx-sc','kx-sc-val'],
+ ['ky-sc','ky-sc-val'],['kwall-z','kwall-val']].forEach(([id,vid])=>{
+  const el=$(id);if(!el)return;
+  el.oninput=()=>{const dv=$(vid);if(dv)dv.textContent=parseFloat(el.value).toFixed(2);kinectCalSend();};
+});
 </script>
 </body>
 </html>
