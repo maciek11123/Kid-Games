@@ -27,8 +27,7 @@ body{background:var(--ink);overflow:hidden;font-family:'JetBrains Mono',monospac
 #hud-canvas{z-index:3;pointer-events:none}
 
 /* camera pip */
-video#cam{position:absolute;top:max(52px,calc(env(safe-area-inset-top,14px)+42px));left:max(14px,env(safe-area-inset-left,14px));width:148px;height:111px;object-fit:cover;z-index:15;opacity:0;transition:opacity .3s;border-radius:8px;border:1px solid var(--cyan-dim);box-shadow:0 2px 12px rgba(0,0,0,.6);pointer-events:none}
-video#cam.cam-on{opacity:1}
+video#cam{display:none!important}
 
 /* HUD */
 #hud{position:absolute;top:max(14px,env(safe-area-inset-top,14px));left:max(14px,env(safe-area-inset-left,14px));z-index:10;display:flex;flex-direction:column;gap:4px;pointer-events:none;transition:opacity .3s}
@@ -38,6 +37,7 @@ video#cam.cam-on{opacity:1}
 .b-status.loading{color:#ffaa00;background:rgba(255,170,0,.12);border-color:rgba(255,170,0,.25)}
 .b-status.error{color:#ff4466;background:rgba(255,68,102,.12);border-color:rgba(255,68,102,.25)}
 .b-hands{background:rgba(0,200,255,.1);color:#00c8ff;border-color:rgba(0,200,255,.2)}
+.b-kinect{background:rgba(170,100,255,.12);color:#be78ff;border-color:rgba(170,100,255,.3)}
 
 #top-controls{position:absolute;top:max(14px,env(safe-area-inset-top,14px));right:max(14px,env(safe-area-inset-right,14px));z-index:30;display:flex;gap:6px;transition:opacity .3s}
 .icon-btn{width:38px;height:38px;display:flex;align-items:center;justify-content:center;border-radius:9px;font-size:16px;cursor:pointer;border:1px solid var(--line);background:var(--glass);color:rgba(255,255,255,.75);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);transition:all .15s;-webkit-tap-highlight-color:transparent}
@@ -128,7 +128,6 @@ video#cam.cam-on{opacity:1}
 
 <div id="top-controls">
   <button class="icon-btn" id="btn-home" title="Home (Esc)">⌂</button>
-  <button class="icon-btn" id="btn-cam-view" title="Camera preview">📷</button>
   <button class="icon-btn" id="btn-fs" title="Fullscreen (F)">⛶</button>
   <button class="icon-btn" id="btn-drawer" title="Settings">☰</button>
 </div>
@@ -139,6 +138,7 @@ video#cam.cam-on{opacity:1}
   <div class="panel" id="dock-games" style="display:none">
     <button class="btn mode-btn btn-game" id="btn-bubbles">🫧 Bubbles</button>
     <button class="btn mode-btn btn-game" id="btn-fruits">🍉 Fruits</button>
+    <button class="btn mode-btn btn-game" id="btn-particles">✦ Particles</button>
   </div>
 </div>
 
@@ -147,22 +147,11 @@ video#cam.cam-on{opacity:1}
   <h1>MAGIC WALL</h1>
   <div class="tagline">Hand Games · Game Launcher</div>
   <div id="home-cards">
-    <div class="card c-games" id="card-games">
-      <div class="big">🫧</div>
-      <h2>Hand Games</h2>
-      <p>Pop bubbles and slice flying fruit with your bare hands. Blob tracking — no internet required.</p>
-      <div class="ctl">Skin tracking · 2 players · score chase</div>
-    </div>
-    <div class="card c-launcher" id="card-launcher">
-      <div class="big">🎮</div>
-      <h2>Game Launcher</h2>
-      <p>All games in the repo — pick one and it launches full screen. Hands tracked and sent in.</p>
-      <div class="ctl">Auto-discovered · iframe · postMessage</div>
-    </div>
+    <!-- Populated by buildAllCards() at boot -->
   </div>
   <div id="home-setup">
-    <span class="cam-state" id="home-cam-state">Camera: <b>starting…</b></span>
-    <button class="pill-btn ghost" id="btn-remote-home">📡 Remote</button>
+    <span class="cam-state" id="home-cam-state">Kinect: <b id="kinect-hud-state">connecting…</b></span>
+<button class="pill-btn ghost" id="btn-remote-home">📡 Remote</button>
     <button class="pill-btn ghost" id="btn-settings-home">Settings</button>
   </div>
 </div>
@@ -171,26 +160,16 @@ video#cam.cam-on{opacity:1}
 <div id="drawer">
   <h3>SETUP <button class="icon-btn" id="btn-drawer-close" style="width:30px;height:30px">✕</button></h3>
   <div class="sec">
-    <div class="sec-title">Camera</div>
-    <select id="cam-select" class="cam-select"></select>
-    <div class="seg">
-      <button class="btn" id="btn-face-front">Front / Selfie</button>
-      <button class="btn" id="btn-face-back">Back / Room</button>
+    <div class="sec-title">Kinect Bridge</div>
+    <div style="display:flex;gap:6px;margin-bottom:6px">
+      <input id="kinect-host-input" type="text" value="localhost" placeholder="IP or localhost"
+        style="flex:1;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:6px;padding:6px 8px;font-size:11px;font-family:inherit">
+      <button class="btn" id="btn-kinect-connect-drawer" style="white-space:nowrap">Connect</button>
     </div>
+    <div id="kinect-drawer-status" style="font-size:10px;color:rgba(255,255,255,.35)">Auto-reconnects every 3s</div>
   </div>
   <div class="sec">
-    <div class="sec-title">Orientation</div>
-    <div class="seg">
-      <button class="btn rot-btn" data-rot="0">0°</button>
-      <button class="btn rot-btn" data-rot="90">90°</button>
-      <button class="btn rot-btn" data-rot="180">180°</button>
-      <button class="btn rot-btn" data-rot="270">270°</button>
-    </div>
-    <label class="row">Mirror image <div class="switch" id="sw-mirror"></div></label>
-  </div>
-  <div class="sec">
-    <div class="sec-title">Tracking</div>
-    <div style="font-size:10px;color:rgba(255,255,255,.45);line-height:1.6">MoveNet MultiPose · up to 2 players<br>Tallest body = P1 · shortest = P2<br>Tracks raised wrist as cursor</div>
+    <div class="sec-title">Calibration</div>
     <button class="pill-btn ghost" id="btn-persp-drawer" style="width:100%;margin-top:6px">📐 Perspective Map</button>
   </div>
   <div class="sec">
@@ -267,224 +246,104 @@ let perspCorners=store.get('perspCorners',null);
 let perspMatrix=null;
 if(perspCorners) perspMatrix=computeHomographyMatrix(perspCorners);
 
+// ═══════════════════════════════════
+//  TRACKING SOURCE  ('camera' | 'kinect')
+// ═══════════════════════════════════
+let kinectWs=null, kinectConnected=false;
+let kinectCal={ xOff:0, yOff:0, xSc:1.0, ySc:1.0, wallZ:1.5 };
+
+function connectKinect(host){
+  if(host) store.set('kinectHost',host);
+  const h=store.get('kinectHost','localhost');
+  if(kinectWs){try{kinectWs.close()}catch(e){}}
+  kinectWs=new WebSocket(`ws://${h}:8765/`);
+  kinectWs.onopen=()=>{
+    kinectConnected=true;
+    toast('⚡ Kinect connected');
+    const lbl=$('kinect-hud-state'); if(lbl) lbl.textContent='connected ●';
+    statusEl.textContent='Kinect ●'; statusEl.className='badge b-status';
+  };
+  kinectWs.onclose=()=>{
+    kinectConnected=false;
+    blobs=[];
+    const lbl=$('kinect-hud-state'); if(lbl) lbl.textContent='disconnected ○';
+    statusEl.textContent='Kinect ○'; statusEl.className='badge b-status error';
+    setTimeout(()=>connectKinect(),3000);
+  };
+  kinectWs.onerror=()=>{};
+  kinectWs.onmessage=(evt)=>{
+    if(trackingSource!=='kinect')return;
+    let msg; try{msg=JSON.parse(evt.data)}catch(e){return;}
+    if(msg.type!=='bodies')return;
+    const newBlobs=[];
+    // Sort bodies tallest-first (highest Y span) so P1=tallest, P2=shortest
+    const sorted=[...msg.bodies].sort((a,b)=>bodySpan(b)-bodySpan(a));
+    sorted.slice(0,2).forEach((body,pi)=>{
+      const j=body.joints;
+      // Pick best hand: highest (lowest Y in camera space) or average of both
+      const lh=j['HandLeft'], rh=j['HandRight'];
+      const lOk=lh&&lh.tracked, rOk=rh&&rh.tracked;
+      let kx,ky,kz;
+      if(lOk&&rOk){ if(lh.y>rh.y){kx=lh.x;ky=lh.y;kz=lh.z}else{kx=rh.x;ky=rh.y;kz=rh.z} }
+      else if(lOk){kx=lh.x;ky=lh.y;kz=lh.z}
+      else if(rOk){kx=rh.x;ky=rh.y;kz=rh.z}
+      else return;
+      // Map Kinect camera space → normalised screen [0,1]
+      // X: Kinect -1..1 → 0..1 (with xSc/xOff), Y: Kinect flipped
+      const nx=Math.max(0,Math.min(1, (kx*kinectCal.xSc+kinectCal.xOff)*0.5+0.5 ));
+      const ny=Math.max(0,Math.min(1, (-ky*kinectCal.ySc+kinectCal.yOff)*0.5+0.5 ));
+      const pressure=Math.max(0,1-kz/kinectCal.wallZ);
+      newBlobs.push({cx:nx,cy:ny,pid:pi,height:1-pi*0.1,pressure,depth:kz});
+    });
+    blobs=newBlobs;
+  };
+}
+
+function bodySpan(body){
+  const j=body.joints;
+  const keys=['Head','SpineBase','ShoulderLeft','ShoulderRight'];
+  let minY=Infinity,maxY=-Infinity;
+  keys.forEach(k=>{ if(j[k]&&j[k].tracked){minY=Math.min(minY,j[k].y);maxY=Math.max(maxY,j[k].y);} });
+  return maxY===minY?0:maxY-minY;
+}
+
 // pose tracking state
-let blobs=[];  // up to 2: [{cx,cy,pid,height}] — wrist positions from MoveNet
+let blobs=[];  // up to 2: [{cx,cy,pid,height}] — wrist positions from MoveNet or Kinect
 const BLOB_COLORS=['#00e5ff','#50fa7b'];
 const PLAYER_LABELS=['P1','P2'];
-let poseDetector=null,poseLoading=null,poseBusy=false;
 // Smoothing buffers per player
-const smooth=[{x:0.5,y:0.5},{x:0.5,y:0.5}];
-const SMOOTH_A=0.35; // lerp factor — higher = more responsive, lower = smoother
 
 function toast(msg,ms=2200){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove('show'),ms)}
 
 // ═══════════════════════════════════
 //  CAMERA
 // ═══════════════════════════════════
-let activeStream=null,camReady=false,isProcessing=false,lastVideoTime=-1,currentDeviceId=null,currentFacing='user';
-const processCanvas=document.createElement('canvas');
-const processCtx=processCanvas.getContext('2d',{willReadFrequently:true});
 
-async function listCameras(){
-  const devs=await navigator.mediaDevices.enumerateDevices();
-  const vids=devs.filter(d=>d.kind==='videoinput');
-  camSelect.innerHTML='';
-  vids.forEach((d,i)=>{const o=document.createElement('option');o.value=d.deviceId;
-    o.text=(d.label||`Camera ${i+1}`).replace(/facing back/i,'(Back)').replace(/facing front/i,'(Front)');
-    camSelect.appendChild(o)});
-  return vids;
-}
 
-async function initCameras(){
-  try{
-    const warm=await navigator.mediaDevices.getUserMedia({video:true});
-    warm.getTracks().forEach(t=>t.stop());
-    const vids=await listCameras();
-    camSelect.onchange=()=>startCam({deviceId:camSelect.value});
-    const savedId=store.get('deviceId',null);
-    if(savedId&&vids.some(v=>v.deviceId===savedId)) await startCam({deviceId:savedId});
-    else if(vids.length>0) await startCam({deviceId:vids[0].deviceId});
-    else await startCam({facing:'user'});
-  }catch(e){
-    camReady=false;
-    statusEl.textContent='Camera blocked';statusEl.className='badge b-status error';
-    $('home-cam-state').innerHTML='Camera: <b style="color:#ff4466">blocked — allow camera</b>';
-  }
-}
 
-async function startCam(opt={}){
-  if(activeStream){activeStream.getTracks().forEach(t=>t.stop());videoElement.srcObject=null;await new Promise(r=>setTimeout(r,250))}
-  statusEl.textContent='Camera…';statusEl.className='badge b-status loading';camReady=false;
-  let cs;
-  if(opt.deviceId) cs={video:{deviceId:{exact:opt.deviceId},width:{ideal:1280},height:{ideal:720}}};
-  else cs={video:{facingMode:opt.facing||'user',width:{ideal:1280},height:{ideal:720}}};
-  try{activeStream=await navigator.mediaDevices.getUserMedia(cs)}
-  catch(e){
-    try{cs=opt.deviceId?{video:{deviceId:opt.deviceId}}:{video:true};activeStream=await navigator.mediaDevices.getUserMedia(cs)}
-    catch(e2){statusEl.textContent='CAM ERR';statusEl.className='badge b-status error';return}
-  }
-  const track=activeStream.getVideoTracks()[0];
-  currentDeviceId=track.getSettings().deviceId||opt.deviceId||null;
-  if(currentDeviceId){store.set('deviceId',currentDeviceId);
-    for(let i=0;i<camSelect.options.length;i++)if(camSelect.options[i].value===currentDeviceId){camSelect.selectedIndex=i;break}}
-  const facing=track.getSettings().facingMode;
-  currentFacing=facing||opt.facing||'user';
-  if(facing&&!store.get('mirrorLocked',false)){setMirror(facing!=='environment',false)}
-  videoElement.srcObject=activeStream;
-  try{await videoElement.play()}catch(e){}
-  camReady=true;
-  $('home-cam-state').innerHTML=`Camera: <b>${(track.label||'ready').slice(0,34)}</b>`;
-  statusEl.textContent='Ready';statusEl.className='badge b-status';
-  applyPreviewTransform();
-  if(!isProcessing){isProcessing=true;processLoop()}
-}
 
-function srcDims(){
-  const vw=videoElement.videoWidth||1280,vh=videoElement.videoHeight||720;
-  return (camRotation===90||camRotation===270)?{w:vh,h:vw}:{w:vw,h:vh};
-}
-function rotatedFrame(){
-  if(camRotation===0)return videoElement;
-  const vw=videoElement.videoWidth,vh=videoElement.videoHeight;
-  if(!vw||!vh)return null;
-  const d=srcDims();
-  if(processCanvas.width!==d.w||processCanvas.height!==d.h){processCanvas.width=d.w;processCanvas.height=d.h}
-  processCtx.save();
-  processCtx.translate(d.w/2,d.h/2);
-  processCtx.rotate(camRotation*Math.PI/180);
-  processCtx.drawImage(videoElement,-vw/2,-vh/2);
-  processCtx.restore();
-  return processCanvas;
-}
 
-function applyPreviewTransform(){
-  let tx=[];
-  if(camRotation) tx.push(`rotate(${camRotation}deg)`);
-  if(mirrorX) tx.push('scaleX(-1)');
-  videoElement.style.transform=tx.join(' ')||'none';
-}
 
-function setRotation(r,save=true){
-  camRotation=r;if(save)store.set('rotation',r);
-  document.querySelectorAll('.rot-btn').forEach(b=>b.classList.toggle('active',+b.dataset.rot===r));
-  applyPreviewTransform();
-}
-function setMirror(on,lock=true){
-  mirrorX=on;if(lock)store.set('mirrorLocked',true);store.set('mirror',on);
-  $('sw-mirror').classList.toggle('on',on);
-  applyPreviewTransform();
-}
 
 // ═══════════════════════════════════
 //  MOVENET MULTIPOSE TRACKING
 // ═══════════════════════════════════
 // Keypoint indices (MoveNet): 9=left wrist, 10=right wrist, 5=left shoulder, 6=right shoulder
-const KP_LWRIST=9,KP_RWRIST=10,KP_LSHOULDER=5,KP_RSHOULDER=6,KP_NOSE=0;
-const MIN_KP_SCORE=0.2;
 
-async function ensurePose(){
-  if(poseDetector) return poseDetector;
-  if(poseLoading) return poseLoading;
-  poseLoading=(async()=>{
-    statusEl.textContent='Loading pose…';statusEl.className='badge b-status loading';
-    // Load TF.js + MoveNet
-    await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.11.0/dist/tf-core.min.js');
-    await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.11.0/dist/tf-backend-webgl.min.js');
-    await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js');
-    await tf.setBackend('webgl');
-    await tf.ready();
-    poseDetector=await poseDetection.createDetector(
-      poseDetection.SupportedModels.MoveNet,
-      {modelType:poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING,enableSmoothing:false,minPoseScore:0.15}
-    );
-    statusEl.textContent='Ready';statusEl.className='badge b-status';
-    return poseDetector;
-  })();
-  return poseLoading;
-}
 
-function loadScript(src){
-  return new Promise((res,rej)=>{
-    if(document.querySelector(`script[src="${src}"]`)) return res();
-    const s=document.createElement('script');s.src=src;s.crossOrigin='anonymous';
-    s.onload=res;s.onerror=()=>rej(new Error('load fail '+src));
-    document.head.appendChild(s);
-  });
-}
 
 // Get bounding box height of a pose (shoulder-to-nose span as size proxy)
-function poseHeight(pose){
-  const kps=pose.keypoints;
-  let minY=Infinity,maxY=-Infinity;
-  [KP_NOSE,KP_LSHOULDER,KP_RSHOULDER,KP_LWRIST,KP_RWRIST].forEach(i=>{
-    if(kps[i]&&kps[i].score>MIN_KP_SCORE){minY=Math.min(minY,kps[i].y);maxY=Math.max(maxY,kps[i].y)}
-  });
-  return maxY===minY ? 0 : maxY-minY;
-}
 
 // Get best wrist position from a pose (highest-confidence wrist, or average of both)
-function poseWrist(pose,dim){
-  const kps=pose.keypoints;
-  const lw=kps[KP_LWRIST],rw=kps[KP_RWRIST];
-  const lOk=lw&&lw.score>MIN_KP_SCORE, rOk=rw&&rw.score>MIN_KP_SCORE;
-  let nx,ny;
-  if(lOk&&rOk){
-    // Use highest wrist (lowest y = higher on screen = more likely raised hand)
-    if(lw.y<rw.y){nx=lw.x/dim.w;ny=lw.y/dim.h}
-    else{nx=rw.x/dim.w;ny=rw.y/dim.h}
-  } else if(lOk){nx=lw.x/dim.w;ny=lw.y/dim.h}
-  else if(rOk){nx=rw.x/dim.w;ny=rw.y/dim.h}
-  else return null;
-  // Mirror if needed
-  if(mirrorX) nx=1-nx;
-  return {cx:nx,cy:ny};
-}
 
-async function runPose(frame){
-  if(!poseDetector||poseBusy)return;
-  poseBusy=true;
-  try{
-    const dim=srcDims();
-    const poses=await poseDetector.estimatePoses(frame,{maxPoses:2,flipHorizontal:false});
-    if(!poses||!poses.length){blobs=[];poseBusy=false;return}
-
-    // Sort by height descending: tallest = P1 (Charlie/older), shortest = P2 (toddler)
-    const sorted=[...poses].sort((a,b)=>poseHeight(b)-poseHeight(a));
-
-    const newBlobs=[];
-    sorted.slice(0,2).forEach((pose,pi)=>{
-      const w=poseWrist(pose,dim);
-      if(!w)return;
-      // Smooth
-      smooth[pi].x+=(w.cx-smooth[pi].x)*SMOOTH_A;
-      smooth[pi].y+=(w.cy-smooth[pi].y)*SMOOTH_A;
-      newBlobs.push({cx:smooth[pi].x,cy:smooth[pi].y,pid:pi,height:poseHeight(pose)});
-    });
-    blobs=newBlobs;
-  }catch(e){console.warn('pose err',e)}
-  poseBusy=false;
-}
 
 // ═══════════════════════════════════
 //  MAIN PROCESS LOOP
 // ═══════════════════════════════════
 // Pose runs on its own interval (50ms = ~20fps) independent of render
-let poseInterval=null;
-function startPoseLoop(){
-  if(poseInterval)return;
-  poseInterval=setInterval(async()=>{
-    if(!camReady||videoElement.paused||videoElement.readyState<2)return;
-    if(currentCategory!=='game'&&currentCategory!=='launcher')return;
-    const frame=rotatedFrame();
-    if(frame) await runPose(frame);
-  },50);
-}
-function stopPoseLoop(){clearInterval(poseInterval);poseInterval=null;}
 
 function processLoop(){
   requestAnimationFrame(processLoop);
-  if(!camReady)return;
-
   // Track FPS
   trackFrames++;
   const now=performance.now();
@@ -492,8 +351,8 @@ function processLoop(){
 
   if(currentCategory==='game'||currentCategory==='launcher'){
     // Update HUD
-    handStatusEl.textContent=blobs.length===0?'Searching…':
-      blobs.map((b,i)=>`${PLAYER_LABELS[i]}${b.height>0?' ✓':''}`).join(' · ');
+    handStatusEl.textContent=!kinectConnected?'Kinect disconnected':blobs.length===0?'No bodies':
+      blobs.map((b,i)=>`${PLAYER_LABELS[i]} ✓`).join(' · ');
 
     // Send to iframe games
     if(currentCategory==='launcher'&&activeGame){
@@ -519,7 +378,8 @@ function animate(){
   hCtx.clearRect(0,0,W,H);
 
   if(currentCategory==='game'){
-    drawGameFrame();
+    if(currentMode==='particles') tickParticles();
+    else drawGameFrame();
   }
 
   // draw pose cursors on hud
@@ -629,6 +489,97 @@ function drawGameFrame(){
 }
 
 // ═══════════════════════════════════
+//  PARTICLES MODE (Three.js)
+// ═══════════════════════════════════
+let threeScene=null,threeCamera=null,threeRenderer=null,threePoints=null,threeGeo=null,threeMat=null;
+let pPositions=null,pVelocities=null,pOrigins=null;
+const P_COUNT=80000;
+
+function ensureThree(){
+  return new Promise((res,rej)=>{
+    if(window.THREE)return res();
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+    s.onload=res;s.onerror=rej;
+    document.head.appendChild(s);
+  });
+}
+
+async function initParticles(){
+  await ensureThree();
+  if(threeRenderer)return; // already set up
+  const W2=window.innerWidth,H2=window.innerHeight;
+  threeScene=new THREE.Scene();
+  threeCamera=new THREE.OrthographicCamera(-W2/2,W2/2,H2/2,-H2/2,1,1000);
+  threeCamera.position.z=100;
+  threeRenderer=new THREE.WebGLRenderer({antialias:false,alpha:true});
+  threeRenderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  threeRenderer.setSize(W2,H2);
+  threeRenderer.domElement.style.cssText='position:fixed;inset:0;z-index:4;pointer-events:none;';
+  document.body.appendChild(threeRenderer.domElement);
+
+  pPositions=new Float32Array(P_COUNT*3);
+  pVelocities=new Float32Array(P_COUNT*3);
+  pOrigins=new Float32Array(P_COUNT*3);
+  const cols=new Float32Array(P_COUNT*3);
+  const palette=[new THREE.Color('#ffffff'),new THREE.Color('#aaff88'),new THREE.Color('#ff8844'),new THREE.Color('#88aaff')];
+  for(let i=0;i<P_COUNT;i++){
+    const x=(Math.random()-.5)*W2, y=(Math.random()-.5)*H2;
+    pPositions[i*3]=pOrigins[i*3]=x;
+    pPositions[i*3+1]=pOrigins[i*3+1]=y;
+    const c=palette[Math.floor(Math.random()*palette.length)];
+    cols[i*3]=c.r;cols[i*3+1]=c.g;cols[i*3+2]=c.b;
+  }
+  threeGeo=new THREE.BufferGeometry();
+  threeGeo.setAttribute('position',new THREE.BufferAttribute(pPositions,3));
+  threeGeo.setAttribute('color',new THREE.BufferAttribute(cols,3));
+  threeMat=new THREE.PointsMaterial({size:3.5,vertexColors:true,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:0.85});
+  threePoints=new THREE.Points(threeGeo,threeMat);
+  threeScene.add(threePoints);
+}
+
+function tickParticles(){
+  if(!threeRenderer||!pPositions)return;
+  const W2=window.innerWidth,H2=window.innerHeight;
+  const damp=0.975, ret=0.012, fs=2.0;
+  for(let i=0;i<P_COUNT;i++){
+    const ix=i*3,iy=ix+1;
+    let px=pPositions[ix],py=pPositions[iy];
+    let vx=pVelocities[ix],vy=pVelocities[iy];
+    // Apply force from each blob
+    for(const b of blobs){
+      let bx=b.cx,by=b.cy;
+      if(perspMatrix){const pp=applyPersp(bx,by);bx=pp.x;by=pp.y}
+      const tx=(bx-.5)*W2, ty=(by-.5)*H2;
+      const dx=px-tx, dy=py-ty;
+      const d=Math.sqrt(dx*dx+dy*dy)+.0001;
+      const radius=160+(b.pressure||0)*180;
+      if(d<radius){
+        const str=(1-d/radius)*16*fs*(1+(b.pressure||0)*1.5);
+        vx+=(dx/d)*str; vy+=(dy/d)*str;
+      }
+    }
+    // Return to origin
+    vx+=(pOrigins[ix]-px)*ret; vy+=(pOrigins[iy]-py)*ret;
+    vx*=damp; vy*=damp;
+    pPositions[ix]=px+vx; pPositions[iy]=py+vy;
+    pVelocities[ix]=vx; pVelocities[iy]=vy;
+  }
+  threeGeo.attributes.position.needsUpdate=true;
+  threeRenderer.render(threeScene,threeCamera);
+}
+
+function destroyParticles(){
+  if(threeRenderer){
+    document.body.removeChild(threeRenderer.domElement);
+    threeRenderer.dispose();
+    threeRenderer=null;threeScene=null;threeCamera=null;
+    threeGeo=null;threeMat=null;threePoints=null;
+    pPositions=pVelocities=pOrigins=null;
+  }
+}
+
+// ═══════════════════════════════════
 //  MODE SWITCHING
 // ═══════════════════════════════════
 function showDocks(cat){
@@ -642,18 +593,23 @@ function setMode(mode,cat){
   document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));
   const btn=$(`btn-${mode}`);if(btn)btn.classList.add('active');
   if(cat==='game'){
-    gameCanvas.style.display='block';
-    if(uiVisible)$('game-ui').style.display='block';
-    gameScore=0;scoreEl.innerText=0;entities=[];particles2D=[];
-    statusEl.textContent='Loading pose…';statusEl.className='badge b-status loading';
-    ensurePose().then(()=>{startPoseLoop();statusEl.textContent='Tracking';statusEl.className='badge b-status';})
-      .catch(()=>toast('Pose model failed to load — check internet'));
+    if(mode==='particles'){
+      gameCanvas.style.display='none';
+      if(uiVisible)$('game-ui').style.display='none';
+      initParticles().then(()=>toast('✦ Particles ready')).catch(()=>toast('Failed to load Three.js'));
+    } else {
+      destroyParticles();
+      gameCanvas.style.display='block';
+      if(uiVisible)$('game-ui').style.display='block';
+      gameScore=0;scoreEl.innerText=0;entities=[];particles2D=[];
+    }
+    statusEl.textContent=kinectConnected?'Kinect ●':'Kinect ○';
+    statusEl.className=kinectConnected?'badge b-status':'badge b-status error';
   }
   if(cat==='launcher'){
     gameCanvas.style.display='none';$('game-ui').style.display='none';
-    statusEl.textContent='Loading pose…';statusEl.className='badge b-status loading';
-    ensurePose().then(()=>{startPoseLoop();statusEl.textContent='Tracking';statusEl.className='badge b-status';})
-      .catch(()=>toast('Pose model failed to load — check internet'));
+    statusEl.textContent=kinectConnected?'Kinect ●':'Kinect ○';
+    statusEl.className=kinectConnected?'badge b-status':'badge b-status error';
   }
   pokeIdle();
 }
@@ -665,6 +621,7 @@ function goHome(){
   gameCanvas.style.display='none';$('game-ui').style.display='none';
   blobs=[];handStatusEl.textContent='—';
   stopPoseLoop();
+  destroyParticles();
   showUI(true);
   if(activeGame)closeGame();
 }
@@ -887,6 +844,7 @@ setInterval(()=>{
       perspCorner:perspSelectedCorner,
       blobCount:blobs.length,
       games:discoveredGames,activeGame,
+      kinectConnected,kinectCal,
     });
   }catch(e){}
 },500);
@@ -896,12 +854,13 @@ function handleRemoteCommand(msg){
   switch(msg.type){
     case 'set-rotation': setRotation(msg.value);break;
     case 'set-mirror':   setMirror(msg.value);break;
-    case 'set-facing':   startCam({facing:msg.value});break;
     case 'set-mode':     setMode(msg.mode,msg.category);break;
     case 'go-home':      goHome();break;
     case 'launch-game':  launchGame(msg.url);break;
     case 'close-game':   closeGame();break;
     case 'skin-calib':   toast('Skin calib removed — using pose tracking');break;
+    case 'kinect-connect': connectKinect(msg.host);break;
+    case 'kinect-cal':   Object.assign(kinectCal,msg.cal);break;
     case 'persp-open':   openPerspCalib();break;
     case 'persp-close':  closePerspCalib(false);break;
     case 'persp-save':   closePerspCalib(true);break;
@@ -940,6 +899,7 @@ async function discoverGames(){
     const games=files.filter(f=>f.name.endsWith('.html')&&!SKIP.test(f.name));
     discoveredGames=games.map(g=>g.name);
     buildDock(games);
+    buildAllCards(games);
   }catch(e){console.warn('Game discovery failed',e)}
 }
 function buildDock(games){
@@ -979,11 +939,8 @@ function launchGame(filename){
   gb.style.display='block';
   $('gdock').style.zIndex='100';
   currentCategory='launcher';
-  statusEl.textContent='Loading pose…';statusEl.className='badge b-status loading';
-  ensurePose().then(()=>{
-    startPoseLoop();
-    statusEl.textContent='Tracking';statusEl.className='badge b-status';
-  }).catch(()=>toast('Pose model failed — check internet'));
+  statusEl.textContent=kinectConnected?'Kinect ●':'Kinect ○';
+  statusEl.className=kinectConnected?'badge b-status':'badge b-status error';
 }
 function closeGame(){
   gw.style.display='none';
@@ -1002,24 +959,36 @@ function sendToGame(data){
 // ═══════════════════════════════════
 //  BUTTON WIRING
 // ═══════════════════════════════════
-$('card-games').onclick=()=>setMode('bubbles','game');
-$('card-launcher').onclick=()=>{
-  $('home').classList.add('gone');
-  currentCategory='launcher';
-  $('gdock').style.display='flex';
-  gameCanvas.style.display='none';$('game-ui').style.display='none';
-  statusEl.textContent='Loading pose…';statusEl.className='badge b-status loading';
-  ensurePose().then(()=>{startPoseLoop();statusEl.textContent='Pick a game';statusEl.className='badge b-status';})
-    .catch(()=>toast('Pose model failed to load — check internet'));
-};
-['bubbles','fruits'].forEach(m=>$('btn-'+m).onclick=()=>setMode(m,'game'));
+// Unified game grid
+const BUILTIN_GAMES=[
+  {id:'bubbles', emoji:'🫧', label:'Bubbles', cat:'game'},
+  {id:'fruits',  emoji:'🍉', label:'Fruits',  cat:'game'},
+  {id:'particles',emoji:'✦', label:'Particles',cat:'game'},
+];
+function buildAllCards(iframeGames){
+  const grid=$('home-cards');
+  grid.innerHTML='';
+  // Built-ins
+  BUILTIN_GAMES.forEach(g=>{
+    const card=document.createElement('div');
+    card.className='card';
+    card.innerHTML=`<div class="big">${g.emoji}</div><h2>${g.label}</h2>`;
+    card.onclick=()=>setMode(g.id,g.cat);
+    grid.appendChild(card);
+  });
+  // iframe games
+  iframeGames.forEach(g=>{
+    const card=document.createElement('div');
+    card.className='card c-launcher';
+    const label=g.name.replace(/\.html$/i,'').replace(/[-_]/g,' ');
+    card.innerHTML=`<div class="big">${gameEmoji(g.name)}</div><h2>${label}</h2>`;
+    card.onclick=()=>launchGame(g.name);
+    grid.appendChild(card);
+  });
+}
+['bubbles','fruits','particles'].forEach(m=>{ const b=$('btn-'+m); if(b) b.onclick=()=>setMode(m,'game'); });
 
 $('btn-home').onclick=goHome;
-$('btn-cam-view').onclick=e=>{
-  camView=!camView;
-  videoElement.classList.toggle('cam-on',camView);
-  e.currentTarget.classList.toggle('lit',camView);
-};
 $('btn-fs').onclick=()=>document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen().catch(()=>{});
 $('btn-drawer').onclick=()=>$('drawer').classList.toggle('open');
 $('btn-drawer-close').onclick=()=>$('drawer').classList.remove('open');
@@ -1031,18 +1000,23 @@ $('btn-remote-home').onclick=async()=>{
   qrOverlay.style.display='flex';
   $('btn-remote-home').textContent='📡 Remote';
 };
-$('btn-face-front').onclick=()=>startCam({facing:'user'});
-$('btn-face-back').onclick=()=>startCam({facing:'environment'});
-document.querySelectorAll('.rot-btn').forEach(b=>b.onclick=()=>setRotation(+b.dataset.rot));
-$('sw-mirror').onclick=()=>setMirror(!mirrorX);
-setRotation(camRotation,false);
-$('sw-mirror').classList.toggle('on',mirrorX);
 
 // ═══════════════════════════════════
 //  BOOT
 // ═══════════════════════════════════
 discoverGames();
-initCameras();
+connectKinect();
+isProcessing=true; processLoop();  // start render loop (no camera needed)
+const _khi=$('kinect-host-input');
+if(_khi){ _khi.value=store.get('kinectHost','localhost'); }
+const _khb=$('btn-kinect-connect-drawer');
+if(_khb){ _khb.onclick=()=>connectKinect(($('kinect-host-input').value||'localhost').trim()); }
+// Update drawer status on connection
+setInterval(()=>{
+  const s=$('kinect-drawer-status');
+  if(s) s.textContent=kinectConnected?'● connected':'○ disconnected — retrying…';
+  if(s) s.style.color=kinectConnected?'#50fa7b':'rgba(255,255,255,.35)';
+},1000);
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{})}
 </script>
 </body>
