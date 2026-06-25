@@ -263,7 +263,7 @@ function connect(){
   const host=document.getElementById('host-input').value.trim()||'localhost';
   if(ws)try{ws.close()}catch(e){}
   log('Connecting to '+host+'…');
-  ws=new WebSocket('ws://'+host+':8765/');
+  ws=new WebSocket('ws://'+host+':8766/');
   ws.onopen=()=>{ document.getElementById('dot').classList.add('on'); document.getElementById('stext').textContent='Kinect: '+host; log('Kinect connected'); };
   ws.onclose=()=>{ document.getElementById('dot').classList.remove('on'); document.getElementById('stext').textContent='Kinect disconnected'; lastBodies=[]; setTimeout(connect,3000); };
   ws.onerror=()=>{};
@@ -307,12 +307,12 @@ let remoteWs=null, remoteClients=[];
 // and we receive those commands here via a local WS on 8766
 
 // Since browser can't open server ports, use a workaround:
-// The remote page connects to the SAME bridge port (8765) with a special handshake
+// The remote page connects to the SAME bridge port (8766) with a special handshake
 let remoteCommandWs;
 function listenForRemote(){
   // Connect to bridge port — bridge will echo back any non-body messages
   // Actually just use a second connection and tag it
-  remoteCommandWs = new WebSocket('ws://'+(document.getElementById('host-input').value.trim()||'localhost')+':8765/');
+  remoteCommandWs = new WebSocket('ws://'+(document.getElementById('host-input').value.trim()||'localhost')+':8766/');
   remoteCommandWs.onmessage=(evt)=>{
     let msg; try{msg=JSON.parse(evt.data)}catch(e){return;}
     if(msg.type==='remote-autofit') startAutoFit();
