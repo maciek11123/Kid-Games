@@ -107,20 +107,28 @@ let lastBodies = [];
 let frameCount = 0, fps = 0, lastFpsTime = Date.now();
 
 // ── Calibration ──
-let cal = { xOff: 0, yOff: 0, xSc: 1.0, ySc: 1.0 };
+let cal = { xOff: 0, yOff: 0, xSc: 1.0, ySc: 1.0, tilt: 0 }; // tilt in degrees
 let lastHead = { x: 0, y: 0 };
 
 function centreMe() {
-  cal.xOff -= lastHead.x * cal.xSc;
-  cal.yOff += lastHead.y * cal.ySc;
+  // Set offsets so current head position maps to screen centre
+  cal.xOff = -lastHead.x;
+  cal.yOff = lastHead.y;
   log('Centred — xOff=' + cal.xOff.toFixed(3) + ' yOff=' + cal.yOff.toFixed(3));
 }
 
 // ── Map Kinect camera space → canvas pixels ──
+// Kinect X: left/right, Y: up/down, Z: depth
+// Apply offset first (shifts body to centre), then scale
 function kToC(x, y) {
   const W = canvas.width, H = canvas.height;
-  const nx = ((x + cal.xOff) * cal.xSc) / 1.2;
-  const ny = ((-y + cal.yOff) * cal.ySc) / 1.2;
+  // Apply tilt rotation (compensate for Kinect being angled)
+  const rad = (cal.tilt || 0) * Math.PI / 180;
+  const cos = Math.cos(rad), sin = Math.sin(rad);
+  const rx = x * cos - y * sin;
+  const ry = x * sin + y * cos;
+  const nx = ((rx + cal.xOff) * cal.xSc) / 1.2;
+  const ny = ((-ry + cal.yOff) * cal.ySc) / 1.2;
   return {
     px: (nx + 1) * 0.5 * W,
     py: (ny + 0.5) * H
@@ -343,7 +351,7 @@ function initPeer() {
           case 'centre': centreMe(); break;
           case 'cal':
             Object.assign(cal, msg.cal);
-            log('Cal updated: xOff=' + cal.xOff.toFixed(2) + ' xSc=' + cal.xSc.toFixed(2));
+            log('Cal: xOff=' + cal.xOff.toFixed(2) + ' xSc=' + cal.xSc.toFixed(2) + ' tilt=' + (cal.tilt||0).toFixed(1));
             break;
           case 'reset':
             cal = { xOff: 0, yOff: 0, xSc: 1.0, ySc: 1.0 };
