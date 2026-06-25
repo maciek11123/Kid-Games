@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>✦ Particle Remote</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+body {
+  background:#0a0a12; color:#fff; font-family:system-ui,sans-serif;
+  min-height:100vh; padding:16px; padding-bottom:40px;
+}
+
+/* Status bar */
+#statusBar {
+  display:flex; align-items:center; gap:8px;
+  background:#111; border-radius:10px; padding:10px 14px;
+  margin-bottom:16px; font-size:12px; color:#888;
+}
+.dot { width:8px; height:8px; border-radius:50%; background:#f00; flex-shrink:0; }
+.dot.on { background:#0f0; }
+#statusText { flex:1; }
+#peerIdLabel { font-size:10px; color:#444; }
+
+/* Centre Me button */
+#btnCentre {
+  width:100%; padding:18px; font-size:18px; font-weight:700;
+  background:linear-gradient(135deg,#1a4a6a,#0a2a4a);
+  border:2px solid #0af; border-radius:14px; color:#0af;
+  cursor:pointer; letter-spacing:1px; margin-bottom:16px;
+  active-background:#0af;
+}
+#btnCentre:active { background:#0af; color:#000; }
+
+/* Section */
+.sec {
+  background:#111; border-radius:12px; padding:14px;
+  margin-bottom:12px;
+}
+.sec-title {
+  font-size:10px; text-transform:uppercase; letter-spacing:1px;
+  color:#555; margin-bottom:12px;
+}
+
+/* Sliders */
+.row {
+  display:flex; align-items:center; gap:10px;
+  margin-bottom:10px;
+}
+.row:last-child { margin-bottom:0; }
+.lbl { font-size:11px; color:#aaa; min-width:65px; }
+.val { font-size:11px; color:#0af; min-width:38px; text-align:right; }
+input[type=range] {
+  flex:1; height:4px; accent-color:#0af;
+  -webkit-appearance:none; background:rgba(255,255,255,0.1);
+  border-radius:2px; outline:none;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance:none; width:22px; height:22px;
+  border-radius:50%; background:#0af; cursor:pointer;
+}
+
+/* Mode buttons */
+.seg {
+  display:grid; grid-template-columns:1fr 1fr; gap:8px;
+}
+.mode-btn {
+  padding:12px 6px; font-size:12px; font-weight:600;
+  background:#1a1a2a; border:1px solid #333; border-radius:8px;
+  color:#888; cursor:pointer;
+}
+.mode-btn.on { background:#1a3a5a; border-color:#0af; color:#0af; }
+.mode-btn:active { background:#0af; color:#000; }
+
+/* Reset */
+#btnReset {
+  width:100%; padding:12px; font-size:12px;
+  background:transparent; border:1px solid #333;
+  border-radius:10px; color:#555; cursor:pointer; margin-top:4px;
+}
+#btnReset:active { border-color:#f44; color:#f44; }
+</style>
+</head>
+<body>
+
+<!-- Status -->
+<div id="statusBar">
+  <div class="dot" id="dot"></div>
+  <span id="statusText">Connecting…</span>
+  <span id="peerIdLabel">kinect-wall-mac</span>
+</div>
+
+<!-- Centre Me -->
+<button id="btnCentre">⊕ CENTRE ME</button>
+
+<!-- Mode -->
+<div class="sec">
+  <div class="sec-title">Mode</div>
+  <div class="seg">
+    <button class="mode-btn on" data-mode="explosion">💥 Explosion</button>
+    <button class="mode-btn" data-mode="gravity">🌀 Gravity</button>
+    <button class="mode-btn" data-mode="ripple">〰️ Ripple</button>
+    <button class="mode-btn" data-mode="attract">✨ Attract</button>
+  </div>
+</div>
+
+<!-- Force -->
+<div class="sec">
+  <div class="sec-title">Force</div>
+  <div class="row">
+    <span class="lbl">Force Scale</span>
+    <input type="range" id="force" min="0.1" max="5" step="0.1" value="1.0">
+    <span class="val" id="forceVal">1.0</span>
+  </div>
+</div>
+
+<!-- Calibration -->
+<div class="sec">
+  <div class="sec-title">Calibration</div>
+  <div class="row">
+    <span class="lbl">X Offset</span>
+    <input type="range" id="xOff" min="-1" max="1" step="0.01" value="0">
+    <span class="val" id="xOffVal">0.00</span>
+  </div>
+  <div class="row">
+    <span class="lbl">Y Offset</span>
+    <input type="range" id="yOff" min="-1" max="1" step="0.01" value="0">
+    <span class="val" id="yOffVal">0.00</span>
+  </div>
+  <div class="row">
+    <span class="lbl">X Scale</span>
+    <input type="range" id="xSc" min="0.3" max="3" step="0.05" value="1">
+    <span class="val" id="xScVal">1.00</span>
+  </div>
+  <div class="row">
+    <span class="lbl">Y Scale</span>
+    <input type="range" id="ySc" min="0.3" max="3" step="0.05" value="1">
+    <span class="val" id="yScVal">1.00</span>
+  </div>
+  <div class="row">
+    <span class="lbl">Wall Z (m)</span>
+    <input type="range" id="wallZ" min="0.5" max="4" step="0.05" value="1.5">
+    <span class="val" id="wallZVal">1.50</span>
+  </div>
+</div>
+
+<!-- Reset -->
+<button id="btnReset">↺ Reset Calibration</button>
+
+<script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+<script>
+const WALL_ID = 'kinect-wall-mac';
+let peer, conn, connected = false;
+
+// ── PeerJS ──
+function init() {
+  peer = new Peer();
+  peer.on('open', id => {
+    document.getElementById('peerIdLabel').textContent = 'my id: ' + id;
+    connectToWall();
+  });
+  peer.on('error', e => {
+    setStatus(false, 'Error: ' + e.type);
+    setTimeout(init, 4000);
+  });
+}
+
+function connectToWall() {
+  setStatus(false, 'Connecting to wall…');
+  conn = peer.connect(WALL_ID, { reliable: true });
+  conn.on('open', () => {
+    connected = true;
+    setStatus(true, 'Connected to wall');
+  });
+  conn.on('close', () => {
+    connected = false;
+    setStatus(false, 'Disconnected — retrying…');
+    setTimeout(connectToWall, 3000);
+  });
+  conn.on('error', () => {
+    connected = false;
+    setStatus(false, 'Connection error');
+    setTimeout(connectToWall, 3000);
+  });
+}
+
+function send(msg) {
+  if (connected && conn && conn.open) conn.send(msg);
+}
+
+function setStatus(on, text) {
+  document.getElementById('dot').classList.toggle('on', on);
+  document.getElementById('statusText').textContent = text;
+}
+
+// ── Centre Me ──
+document.getElementById('btnCentre').onclick = () => {
+  send({ type: 'centre' });
+  // Flash button
+  const btn = document.getElementById('btnCentre');
+  btn.textContent = '✓ Centred!';
+  setTimeout(() => btn.textContent = '⊕ CENTRE ME', 1500);
+};
+
+// ── Mode buttons ──
+document.querySelectorAll('.mode-btn').forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll('.mode-btn').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    send({ type: 'mode', value: b.dataset.mode });
+  };
+});
+
+// ── Force slider ──
+document.getElementById('force').oninput = function() {
+  const v = parseFloat(this.value);
+  document.getElementById('forceVal').textContent = v.toFixed(1);
+  send({ type: 'force', value: v });
+};
+
+// ── Cal sliders ──
+function calSlider(id, vid, dec) {
+  document.getElementById(id).oninput = function() {
+    const v = parseFloat(this.value);
+    document.getElementById(vid).textContent = v.toFixed(dec);
+    sendCal();
+  };
+}
+calSlider('xOff',  'xOffVal', 2);
+calSlider('yOff',  'yOffVal', 2);
+calSlider('xSc',   'xScVal',  2);
+calSlider('ySc',   'yScVal',  2);
+calSlider('wallZ', 'wallZVal',2);
+
+function sendCal() {
+  send({ type: 'cal', cal: {
+    xOff:  parseFloat(document.getElementById('xOff').value),
+    yOff:  parseFloat(document.getElementById('yOff').value),
+    xSc:   parseFloat(document.getElementById('xSc').value),
+    ySc:   parseFloat(document.getElementById('ySc').value),
+    wallZ: parseFloat(document.getElementById('wallZ').value),
+  }});
+}
+
+// ── Reset ──
+document.getElementById('btnReset').onclick = () => {
+  ['xOff','yOff'].forEach(id => document.getElementById(id).value = 0);
+  ['xSc','ySc'].forEach(id => document.getElementById(id).value = 1);
+  document.getElementById('wallZ').value = 1.5;
+  document.getElementById('xOffVal').textContent = '0.00';
+  document.getElementById('yOffVal').textContent = '0.00';
+  document.getElementById('xScVal').textContent  = '1.00';
+  document.getElementById('yScVal').textContent  = '1.00';
+  document.getElementById('wallZVal').textContent = '1.50';
+  sendCal();
+};
+
+init();
+</script>
+</body>
+</html>
