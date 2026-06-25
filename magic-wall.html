@@ -138,6 +138,7 @@ video#cam{display:none!important}
   <div class="panel" id="dock-games" style="display:none">
     <button class="btn mode-btn btn-game" id="btn-bubbles">🫧 Bubbles</button>
     <button class="btn mode-btn btn-game" id="btn-fruits">🍉 Fruits</button>
+    <button class="btn mode-btn btn-game" id="btn-particles">✦ Particles</button>
   </div>
 </div>
 
@@ -255,7 +256,7 @@ function connectKinect(host){
   if(host) store.set('kinectHost',host);
   const h=store.get('kinectHost','localhost');
   if(kinectWs){try{kinectWs.close()}catch(e){}}
-  kinectWs=new WebSocket(`ws://${h}:8765/`);
+  kinectWs=new WebSocket(`ws://${h}:8766/`);
   kinectWs.onopen=()=>{
     kinectConnected=true;
     toast('⚡ Kinect connected');
@@ -422,52 +423,27 @@ let entities=[],particles2D=[],gameScore=0;
 
 function spawnEnt(){
   if(currentMode==='bubbles'){
-    const r=40+Math.random()*55;
-    entities.push({
-      x:Math.random()*W, y:H+r+10,
-      r, sy:0.8+Math.random()*1.4,
-      sx:(Math.random()-.5)*0.6,
-      w:Math.random()*6.28, wSpeed:0.02+Math.random()*0.03,
-      wobble:0, wobbleAmp:Math.random()*0.18+0.04,
-      color:BCOLS[Math.floor(Math.random()*BCOLS.length)],
-      opacity:0.55+Math.random()*0.3,
-      shineAngle:Math.random()*6.28,
-    });
+    entities.push({x:Math.random()*W,y:H+50,r:35+Math.random()*45,sy:1.5+Math.random()*2,sx:(Math.random()-.5)*.8,w:Math.random()*6.28,color:BCOLS[Math.floor(Math.random()*BCOLS.length)]});
   }else{
     let t=FTYPES[Math.floor(Math.random()*FTYPES.length)];
-    entities.push({x:Math.random()*W,y:H+30,r:32+Math.random()*18,sy:4+Math.random()*4,seed:Math.random()*100,emoji:t.e,color:t.c});
+    entities.push({x:Math.random()*W,y:H+50,r:60+Math.random()*30,sy:3+Math.random()*3,seed:Math.random()*100,emoji:t.e,color:t.c});
   }
 }
 
-function splash(x,y,c,isFruit,r){
-  const count=isFruit?18:22;
-  for(let i=0;i<count;i++){
-    const angle=Math.random()*6.28;
-    const spd=(Math.random()*0.6+0.4)*(isFruit?14:12);
-    if(!isFruit){
-      // Bubble pop: small water droplets + ring
-      particles2D.push({x,y,vx:Math.cos(angle)*spd,vy:Math.sin(angle)*spd,
-        r:Math.random()*4+1.5,color:c,alpha:0.9,isFruit:false,gravity:0.25,drag:0.94});
-    } else {
-      particles2D.push({x,y,vx:Math.cos(angle)*spd,vy:Math.sin(angle)*spd-4,
-        r:Math.random()*5+2,color:`rgba(${c},`,alpha:1,isFruit:true,gravity:0.4,drag:0.93});
-    }
+function splash(x,y,c,isFruit){
+  for(let i=0;i<15;i++){
+    particles2D.push({x,y,vx:(Math.random()-.5)*15,vy:(Math.random()-.5)*15,r:Math.random()*(isFruit?6:4)+2,color:isFruit?`rgba(${c},`:c,alpha:1,isFruit});
   }
-  // Bubble pop ring
-  if(!isFruit) particles2D.push({x,y,vx:0,vy:0,r:r||40,color:c,alpha:0.7,isFruit:false,isRing:true,gravity:0,drag:1});
 }
 
 function drawGameFrame(){
   gCtx.clearRect(0,0,W,H);
-  if(Math.random()<(currentMode==='bubbles'?.025:.055)) spawnEnt();
+  if(Math.random()<(currentMode==='bubbles'?.03:.02)) spawnEnt();
 
   // Move + draw entities
   for(let i=entities.length-1;i>=0;i--){
     const e=entities[i];
-    if(currentMode==='bubbles'){
-      e.w+=e.wSpeed; e.wobble=Math.sin(e.w*2)*e.wobbleAmp;
-      e.x+=Math.sin(e.w)*0.7+e.sx; e.y-=e.sy;
-    }
+    if(currentMode==='bubbles'){e.w+=.05;e.x+=Math.sin(e.w)*.5+e.sx;e.y-=e.sy}
     else{e.x+=Math.sin(e.seed+e.y*.01)*0.8;e.y-=e.sy}
     if(e.y<-100){entities.splice(i,1);continue}
 
@@ -488,34 +464,14 @@ function drawGameFrame(){
 
     gCtx.save();gCtx.translate(e.x,e.y);
     if(currentMode==='bubbles'){
-      const r=e.r, w=e.wobble;
-      // Wobble shape via scale
-      gCtx.scale(1+w, 1-w*0.5);
-      // Outer rim gradient
-      const grad=gCtx.createRadialGradient(-r*.2,-r*.25,r*.05,-r*.1,-r*.1,r*1.05);
-      grad.addColorStop(0,'rgba(255,255,255,0.0)');
-      grad.addColorStop(0.7,e.color+'22');
-      grad.addColorStop(0.88,e.color+'66');
-      grad.addColorStop(0.96,e.color+'cc');
-      grad.addColorStop(1,'rgba(255,255,255,0.15)');
-      gCtx.beginPath();gCtx.arc(0,0,r,0,6.28);
-      gCtx.fillStyle=grad;gCtx.fill();
-      // Rim stroke
-      gCtx.strokeStyle=e.color+'bb';gCtx.lineWidth=1.8;gCtx.stroke();
-      // Main shine blob top-left
-      const sg=gCtx.createRadialGradient(-r*.32,-r*.38,0,-r*.28,-r*.32,r*.38);
-      sg.addColorStop(0,'rgba(255,255,255,0.75)');
-      sg.addColorStop(1,'rgba(255,255,255,0)');
-      gCtx.beginPath();gCtx.ellipse(-r*.32,-r*.38,r*.32,r*.22,-0.4,0,6.28);
-      gCtx.fillStyle=sg;gCtx.fill();
-      // Small secondary shine
-      gCtx.beginPath();gCtx.ellipse(r*.3,r*.28,r*.12,r*.08,0.5,0,6.28);
-      gCtx.fillStyle='rgba(255,255,255,0.25)';gCtx.fill();
-      // Coloured inner reflection at bottom
-      gCtx.beginPath();gCtx.ellipse(0,r*.55,r*.35,r*.15,0,0,6.28);
-      gCtx.fillStyle=e.color+'33';gCtx.fill();
+      gCtx.beginPath();gCtx.arc(0,0,e.r,0,6.28);
+      gCtx.fillStyle=e.color+'40';gCtx.fill();
+      gCtx.strokeStyle=e.color;gCtx.lineWidth=2.5;gCtx.stroke();
+      // shine
+      gCtx.beginPath();gCtx.arc(-e.r*.3,-e.r*.3,e.r*.22,0,6.28);
+      gCtx.fillStyle='rgba(255,255,255,.35)';gCtx.fill();
     }else{
-      gCtx.font=`${e.r*1.8}px serif`;gCtx.textAlign='center';gCtx.textBaseline='middle';
+      gCtx.font=`${e.r*1.5}px serif`;gCtx.textAlign='center';gCtx.textBaseline='middle';
       gCtx.fillText(e.emoji,0,0);
     }
     gCtx.restore();
@@ -524,21 +480,11 @@ function drawGameFrame(){
   // Particles
   for(let i=particles2D.length-1;i>=0;i--){
     const p=particles2D[i];
-    p.x+=p.vx; p.y+=p.vy;
-    p.vy+=(p.gravity||0.4); p.vx*=(p.drag||0.96); p.vy*=(p.drag||0.96);
-    if(p.isRing){ p.r+=4; p.alpha-=0.06; }
-    else { p.alpha-=0.035; p.r*=0.97; }
+    p.x+=p.vx;p.y+=p.vy;p.vy+=0.4;p.alpha-=0.04;p.r*=0.97;
     if(p.alpha<=0){particles2D.splice(i,1);continue}
-    gCtx.globalAlpha=p.alpha;
-    if(p.isRing){
-      gCtx.beginPath();gCtx.arc(p.x,p.y,p.r,0,6.28);
-      gCtx.strokeStyle=p.color;gCtx.lineWidth=2;gCtx.stroke();
-    } else {
-      gCtx.beginPath();gCtx.arc(p.x,p.y,p.r,0,6.28);
-      gCtx.fillStyle=p.isFruit?`${p.color}${p.alpha})`:p.color;
-      gCtx.fill();
-    }
-    gCtx.globalAlpha=1;
+    gCtx.beginPath();gCtx.arc(p.x,p.y,p.r,0,6.28);
+    gCtx.fillStyle=p.isFruit?`${p.color}${p.alpha})`:p.color;
+    gCtx.globalAlpha=p.alpha;gCtx.fill();gCtx.globalAlpha=1;
   }
 }
 
@@ -936,8 +882,7 @@ $('qr-close').onclick=()=>qrOverlay.style.display='none';
 //  AUTO-DISCOVER GAME LAUNCHER
 // ═══════════════════════════════════
 const REPO='maciek11123/Kid-Games';
-const SKIP=/^(magic-wall[\w-]*|index|remote|server|particle)\.html$/i;
-const KEEP=['Blobz3.html','Capy2.html','Pusheen.html','squishy-friends-4b.html'];
+const SKIP=/^(magic-wall[\w-]*|index|remote|server)\.html$/i;
 const EMOJI={blobz:'🔵',capy:'🐾',pusheen:'🐱',squishy:'🧸',sea:'🌊',char:'🎭',fruit:'🍉',bubble:'🫧',nogyo:'🥷'};
 
 function gameEmoji(name){
@@ -951,7 +896,7 @@ async function discoverGames(){
   try{
     const r=await fetch(`https://api.github.com/repos/${REPO}/contents/`);
     const files=await r.json();
-    const games=files.filter(f=>KEEP.includes(f.name));
+    const games=files.filter(f=>f.name.endsWith('.html')&&!SKIP.test(f.name));
     discoveredGames=games.map(g=>g.name);
     buildDock(games);
     buildAllCards(games);
@@ -1018,6 +963,7 @@ function sendToGame(data){
 const BUILTIN_GAMES=[
   {id:'bubbles', emoji:'🫧', label:'Bubbles', cat:'game'},
   {id:'fruits',  emoji:'🍉', label:'Fruits',  cat:'game'},
+  {id:'particles',emoji:'✦', label:'Particles',cat:'game'},
 ];
 function buildAllCards(iframeGames){
   const grid=$('home-cards');
@@ -1040,7 +986,7 @@ function buildAllCards(iframeGames){
     grid.appendChild(card);
   });
 }
-['bubbles','fruits'].forEach(m=>{ const b=$('btn-'+m); if(b) b.onclick=()=>setMode(m,'game'); });
+['bubbles','fruits','particles'].forEach(m=>{ const b=$('btn-'+m); if(b) b.onclick=()=>setMode(m,'game'); });
 
 $('btn-home').onclick=goHome;
 $('btn-fs').onclick=()=>document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen().catch(()=>{});
