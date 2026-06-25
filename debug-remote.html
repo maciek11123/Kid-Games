@@ -3,51 +3,51 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-<title>Kinect Debug Remote</title>
+<title>Kinect Remote</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 body {
   background:#0a0a12; color:#fff;
   font-family:system-ui,sans-serif;
-  min-height:100vh; padding:16px; padding-bottom:40px;
+  min-height:100vh; display:flex; flex-direction:column;
+  padding:20px; gap:14px;
 }
-
 #statusBar {
   display:flex; align-items:center; gap:8px;
-  background:#111; border-radius:10px; padding:10px 14px;
-  margin-bottom:14px; font-size:12px; color:#888;
+  background:#111; border-radius:10px; padding:12px 14px;
+  font-size:12px; color:#888;
 }
 .dot { width:8px; height:8px; border-radius:50%; background:#f00; flex-shrink:0; }
 .dot.on { background:#0f0; }
-#statusText { flex:1; }
 
-/* Big Centre Me */
-#btnCentre {
-  width:100%; padding:20px; font-size:20px; font-weight:800;
-  background:linear-gradient(135deg,#1a4a1a,#0a2a0a);
-  border:2px solid #0f0; border-radius:14px; color:#0f0;
-  cursor:pointer; letter-spacing:1px; margin-bottom:14px;
+/* THE button */
+#btnAutoFit {
+  flex:1; padding:0 20px;
+  font-size:22px; font-weight:900;
+  background:linear-gradient(135deg,#003a1a,#001a0a);
+  border:3px solid #0f0; border-radius:20px; color:#0f0;
+  cursor:pointer; letter-spacing:2px;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:8px;
+  min-height:200px;
 }
-#btnCentre:active { background:#0f0; color:#000; }
+#btnAutoFit .sub { font-size:12px; font-weight:400; color:#0f06; letter-spacing:0; }
+#btnAutoFit:active { background:#0f0; color:#000; }
+#btnAutoFit:active .sub { color:#0006; }
 
-.sec {
-  background:#111; border-radius:12px;
-  padding:14px; margin-bottom:12px;
+/* Fine tune (hidden by default, show after fit) */
+#fineTune {
+  background:#111; border-radius:12px; padding:14px;
+  display:none;
 }
-.sec-title {
-  font-size:10px; text-transform:uppercase;
-  letter-spacing:1px; color:#444; margin-bottom:12px;
-}
-.row {
-  display:flex; align-items:center; gap:10px; margin-bottom:10px;
-}
+#fineTune .title { font-size:10px; text-transform:uppercase; letter-spacing:1px; color:#444; margin-bottom:10px; }
+.row { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
 .row:last-child { margin-bottom:0; }
-.lbl { font-size:11px; color:#aaa; min-width:65px; }
-.val { font-size:11px; color:#0af; min-width:38px; text-align:right; }
+.lbl { font-size:11px; color:#888; min-width:55px; }
+.val { font-size:11px; color:#0af; min-width:35px; text-align:right; }
 input[type=range] {
-  flex:1; accent-color:#0af;
-  -webkit-appearance:none; height:4px;
-  background:rgba(255,255,255,.1); border-radius:2px;
+  flex:1; accent-color:#0af; height:4px;
+  -webkit-appearance:none; background:rgba(255,255,255,.1); border-radius:2px;
 }
 input[type=range]::-webkit-slider-thumb {
   -webkit-appearance:none; width:24px; height:24px;
@@ -55,56 +55,57 @@ input[type=range]::-webkit-slider-thumb {
 }
 
 #btnReset {
-  width:100%; padding:12px; font-size:12px;
-  background:transparent; border:1px solid #333;
-  border-radius:10px; color:#555; cursor:pointer;
+  padding:12px; font-size:12px;
+  background:transparent; border:1px solid #222;
+  border-radius:10px; color:#444; cursor:pointer;
 }
 #btnReset:active { border-color:#f44; color:#f44; }
+#btnTune {
+  padding:10px; font-size:11px;
+  background:transparent; border:1px solid #222;
+  border-radius:8px; color:#444; cursor:pointer;
+}
 </style>
 </head>
 <body>
 
 <div id="statusBar">
   <div class="dot" id="dot"></div>
-  <span id="statusText">Connecting to debug page…</span>
+  <span id="statusText">Connecting…</span>
 </div>
 
-<button id="btnCentre">⊕ CENTRE ME</button>
+<button id="btnAutoFit">
+  ⊕ AUTO-FIT ME
+  <span class="sub">Stand still · holds 3 seconds · done</span>
+</button>
 
-<div class="sec">
-  <div class="sec-title">Position</div>
+<button id="btnTune">⚙ Fine tune manually</button>
+
+<div id="fineTune">
+  <div class="title">Fine Tune</div>
+  <div class="row">
+    <span class="lbl">Tilt °</span>
+    <input type="range" id="tilt" min="-90" max="90" step="1" value="0">
+    <span class="val" id="tiltVal">0</span>
+  </div>
   <div class="row">
     <span class="lbl">X Offset</span>
-    <input type="range" id="xOff" min="-1.5" max="1.5" step="0.01" value="0">
+    <input type="range" id="xOff" min="-2" max="2" step="0.01" value="0">
     <span class="val" id="xOffVal">0.00</span>
   </div>
   <div class="row">
     <span class="lbl">Y Offset</span>
-    <input type="range" id="yOff" min="-1.5" max="1.5" step="0.01" value="0">
+    <input type="range" id="yOff" min="-2" max="2" step="0.01" value="0">
     <span class="val" id="yOffVal">0.00</span>
   </div>
   <div class="row">
-    <span class="lbl">Tilt °</span>
-    <input type="range" id="tilt" min="-45" max="45" step="1" value="0">
-    <span class="val" id="tiltVal">0</span>
+    <span class="lbl">Scale</span>
+    <input type="range" id="sc" min="0.2" max="4" step="0.05" value="1">
+    <span class="val" id="scVal">1.00</span>
   </div>
 </div>
 
-<div class="sec">
-  <div class="sec-title">Scale</div>
-  <div class="row">
-    <span class="lbl">X Scale</span>
-    <input type="range" id="xSc" min="0.2" max="3" step="0.05" value="1">
-    <span class="val" id="xScVal">1.00</span>
-  </div>
-  <div class="row">
-    <span class="lbl">Y Scale</span>
-    <input type="range" id="ySc" min="0.2" max="3" step="0.05" value="1">
-    <span class="val" id="yScVal">1.00</span>
-  </div>
-</div>
-
-<button id="btnReset">↺ Reset All</button>
+<button id="btnReset">↺ Reset everything</button>
 
 <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
 <script>
@@ -118,61 +119,67 @@ function init() {
 }
 
 function connectToWall() {
-  setStatus(false, 'Connecting…');
-  conn = peer.connect(WALL_ID, { reliable: true });
-  conn.on('open',  () => { connected=true;  setStatus(true,  'Connected to debug page'); });
-  conn.on('close', () => { connected=false; setStatus(false, 'Lost connection — retrying…'); setTimeout(connectToWall,3000); });
-  conn.on('error', () => { connected=false; setStatus(false, 'Error — retrying…');          setTimeout(connectToWall,3000); });
+  setStatus(false,'Connecting…');
+  conn = peer.connect(WALL_ID, { reliable:true });
+  conn.on('open',  () => { connected=true;  setStatus(true,'Connected'); });
+  conn.on('close', () => { connected=false; setStatus(false,'Lost — retrying…'); setTimeout(connectToWall,3000); });
+  conn.on('error', () => { connected=false; setStatus(false,'Error — retrying…');  setTimeout(connectToWall,3000); });
 }
 
-function send(msg) {
-  if (connected && conn && conn.open) conn.send(msg);
+function send(msg) { if(connected&&conn&&conn.open) conn.send(msg); }
+function setStatus(on,txt) {
+  document.getElementById('dot').classList.toggle('on',on);
+  document.getElementById('statusText').textContent = txt;
 }
 
-function setStatus(on, text) {
-  document.getElementById('dot').classList.toggle('on', on);
-  document.getElementById('statusText').textContent = text;
-}
-
-// Centre Me
-document.getElementById('btnCentre').onclick = () => {
-  send({ type: 'centre' });
-  const btn = document.getElementById('btnCentre');
-  btn.textContent = '✓ Done!';
-  setTimeout(() => btn.textContent = '⊕ CENTRE ME', 1500);
+// Auto-fit
+document.getElementById('btnAutoFit').onclick = () => {
+  const btn = document.getElementById('btnAutoFit');
+  send({ type:'autofit' });
+  btn.innerHTML = '3…<span class="sub">hold still</span>';
+  setTimeout(()=>btn.innerHTML='2…<span class="sub">hold still</span>',1000);
+  setTimeout(()=>btn.innerHTML='1…<span class="sub">hold still</span>',2000);
+  setTimeout(()=>{ btn.innerHTML='✓ Done!<span class="sub">check screen</span>'; },3000);
+  setTimeout(()=>{ btn.innerHTML='⊕ AUTO-FIT ME<span class="sub">Stand still · holds 3 seconds · done</span>'; },5000);
 };
 
-// Cal sliders
-function calSlider(id, vid, dec) {
-  document.getElementById(id).oninput = function() {
-    document.getElementById(vid).textContent = parseFloat(this.value).toFixed(dec);
+// Fine tune toggle
+document.getElementById('btnTune').onclick = () => {
+  const ft = document.getElementById('fineTune');
+  ft.style.display = ft.style.display==='none'?'block':'none';
+};
+
+// Sliders
+function slider(id,vid,dec,key){
+  document.getElementById(id).oninput=function(){
+    document.getElementById(vid).textContent=parseFloat(this.value).toFixed(dec);
     sendCal();
   };
 }
-calSlider('xOff','xOffVal',2);
-calSlider('yOff','yOffVal',2);
-calSlider('xSc', 'xScVal', 2);
-calSlider('ySc', 'yScVal', 2);
-calSlider('tilt','tiltVal', 0);
+slider('tilt','tiltVal',0,'tilt');
+slider('xOff','xOffVal',2,'xOff');
+slider('yOff','yOffVal',2,'yOff');
+slider('sc',  'scVal',  2,'sc');
 
-function sendCal() {
-  send({ type:'cal', cal:{
+function sendCal(){
+  const sc=parseFloat(document.getElementById('sc').value);
+  send({type:'cal',cal:{
+    tilt: parseFloat(document.getElementById('tilt').value),
     xOff: parseFloat(document.getElementById('xOff').value),
     yOff: parseFloat(document.getElementById('yOff').value),
-    xSc:  parseFloat(document.getElementById('xSc').value),
-    ySc:  parseFloat(document.getElementById('ySc').value),
-    tilt: parseFloat(document.getElementById('tilt').value),
+    xSc:sc, ySc:sc,
   }});
 }
 
 // Reset
-document.getElementById('btnReset').onclick = () => {
-  ['xOff','yOff','tilt'].forEach(id => { document.getElementById(id).value=0; });
-  ['xSc','ySc'].forEach(id   => { document.getElementById(id).value=1; });
-  ['xOffVal','yOffVal'].forEach(id => document.getElementById(id).textContent='0.00');
+document.getElementById('btnReset').onclick=()=>{
+  ['xOff','yOff'].forEach(id=>document.getElementById(id).value=0);
+  document.getElementById('tilt').value=0;
+  document.getElementById('sc').value=1;
+  ['xOffVal','yOffVal'].forEach(id=>document.getElementById(id).textContent='0.00');
   document.getElementById('tiltVal').textContent='0';
-  ['xScVal','yScVal'].forEach(id   => document.getElementById(id).textContent='1.00');
-  send({ type:'reset' });
+  document.getElementById('scVal').textContent='1.00';
+  send({type:'reset'});
 };
 
 init();
