@@ -6,10 +6,8 @@
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body { background:#0a0a12; overflow:hidden; font-family:'Courier New',monospace; }
-canvas { position:fixed; inset:0; }
-#c { z-index:1; }
+canvas { position:fixed; inset:0; z-index:1; }
 
-/* Status */
 #status {
   position:fixed; top:12px; left:12px; z-index:10;
   font-size:11px; color:#888; line-height:1.8;
@@ -17,47 +15,50 @@ canvas { position:fixed; inset:0; }
 .dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:#f00; margin-right:6px; vertical-align:middle; }
 .dot.on { background:#0f0; }
 
-/* Panel */
 #panel {
   position:fixed; top:12px; right:12px; z-index:10;
-  background:rgba(0,0,0,0.75); border:1px solid #222;
+  background:rgba(0,0,0,0.8); border:1px solid #222;
   border-radius:8px; padding:10px 12px; font-size:10px;
-  color:#666; width:200px; line-height:1.9;
+  color:#666; width:180px; line-height:2;
 }
 #panel b { color:#0af; }
+
+/* QR overlay */
+#qrOverlay {
+  position:fixed; inset:0; z-index:30;
+  background:rgba(0,0,0,0.92);
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:16px;
+}
+#qrOverlay h2 { color:#fff; font-size:16px; font-family:system-ui; }
+#qrOverlay p  { color:#888; font-size:12px; font-family:system-ui; }
+#qrImg { width:220px; height:220px; background:#fff; border-radius:8px; padding:10px; }
+#qrUrl { color:#0af; font-size:11px; font-family:monospace; }
+#btnDismiss {
+  padding:10px 24px; background:#0af1; border:1px solid #0af;
+  color:#0af; border-radius:8px; cursor:pointer; font-size:13px;
+  font-family:system-ui;
+}
 
 /* Auto-fit overlay */
 #autofit {
   position:fixed; inset:0; z-index:20;
-  background:rgba(0,0,0,0.85);
-  display:flex; flex-direction:column;
+  background:rgba(0,0,0,0.88);
+  display:none; flex-direction:column;
   align-items:center; justify-content:center;
-  color:#fff; text-align:center;
-  display:none;
+  color:#fff; text-align:center; gap:12px;
 }
-#autofit h2 { font-size:22px; margin-bottom:10px; }
-#autofit p  { font-size:13px; color:#888; max-width:320px; line-height:1.6; margin-bottom:20px; }
-#autofit .big { font-size:60px; margin-bottom:10px; }
-#countdown { font-size:48px; font-weight:900; color:#0f0; }
-#fitResult { font-size:13px; color:#0f0; margin-top:16px; min-height:20px; }
+#autofit h2  { font-size:20px; }
+#autofit p   { font-size:12px; color:#888; max-width:300px; line-height:1.6; }
+#countdown   { font-size:56px; font-weight:900; color:#0f0; }
+#fitResult   { font-size:13px; color:#0f0; min-height:20px; }
 
-/* Host input */
 #hostRow { position:fixed; bottom:12px; left:12px; z-index:10; display:flex; gap:6px; }
-#host-input {
-  background:#111; border:1px solid #333; color:#fff;
-  padding:5px 8px; border-radius:4px; font-family:inherit; font-size:11px; width:120px;
-}
-#connect-btn {
-  padding:5px 10px; background:#0af1; border:1px solid #0af;
-  color:#0af; border-radius:4px; cursor:pointer; font-size:11px;
-}
+#host-input { background:#111; border:1px solid #333; color:#fff; padding:5px 8px; border-radius:4px; font-size:11px; width:130px; font-family:inherit; }
+#connect-btn { padding:5px 10px; background:#0af1; border:1px solid #0af; color:#0af; border-radius:4px; cursor:pointer; font-size:11px; }
+#btn-qr { padding:5px 10px; background:#1a1; border:1px solid #0f0; color:#0f0; border-radius:4px; cursor:pointer; font-size:11px; }
 
-/* Log */
-#log {
-  position:fixed; bottom:12px; right:12px; z-index:10;
-  font-size:9px; color:#333; line-height:1.5; width:300px; text-align:right;
-  max-height:80px; overflow:hidden;
-}
+#log { position:fixed; bottom:12px; right:12px; z-index:10; font-size:9px; color:#333; line-height:1.5; width:280px; text-align:right; }
 </style>
 </head>
 <body>
@@ -73,23 +74,30 @@ canvas { position:fixed; inset:0; }
 <div id="panel">
   <div><b>Kinect Debug</b></div>
   <div id="calDisplay">No calibration</div>
-  <div style="margin-top:6px;color:#444;font-size:9px">
-    Remote: debug-remote.html<br>
-    Peer ID: kinect-debug-mac
-  </div>
 </div>
 
+<!-- QR overlay -->
+<div id="qrOverlay">
+  <h2>📱 Scan to open remote</h2>
+  <img id="qrImg" src="" alt="QR">
+  <div id="qrUrl"></div>
+  <p>Make sure your phone is on the same WiFi</p>
+  <button id="btnDismiss">Got it — dismiss</button>
+</div>
+
+<!-- Auto-fit overlay -->
 <div id="autofit">
-  <div class="big">🧍</div>
+  <div style="font-size:50px">🧍</div>
   <h2>Stand in position</h2>
-  <p>Stand where you'll normally be.<br>Hold still — capturing in…</p>
+  <p>Hold still — capturing in…</p>
   <div id="countdown">3</div>
   <div id="fitResult"></div>
 </div>
 
 <div id="hostRow">
-  <input id="host-input" type="text" value="localhost" placeholder="host">
+  <input id="host-input" type="text" value="localhost" placeholder="Kinect bridge host">
   <button id="connect-btn">Connect</button>
+  <button id="btn-qr">📱 QR</button>
 </div>
 
 <div id="log"></div>
@@ -98,297 +106,251 @@ canvas { position:fixed; inset:0; }
 const canvas = document.getElementById('c');
 const ctx    = canvas.getContext('2d');
 let W, H;
+function resize(){ W=canvas.width=window.innerWidth; H=canvas.height=window.innerHeight; }
+resize(); window.addEventListener('resize', resize);
 
-function resize() {
-  W = canvas.width  = window.innerWidth;
-  H = canvas.height = window.innerHeight;
-}
-resize();
-window.addEventListener('resize', resize);
-
-// ── Calibration ──
+// ── Cal ──
 let cal = { xOff:0, yOff:0, xSc:1, ySc:1, tilt:0 };
 
 function applyKToC(x, y) {
   const rad = cal.tilt * Math.PI / 180;
   const cos = Math.cos(rad), sin = Math.sin(rad);
-  const rx  = x * cos - y * sin;
-  const ry  = x * sin + y * cos;
+  const rx  = x*cos - y*sin;
+  const ry  = x*sin + y*cos;
   const nx  = ((rx + cal.xOff) * cal.xSc) / 1.2;
   const ny  = ((-ry + cal.yOff) * cal.ySc) / 1.2;
-  return {
-    px: (nx + 1) * 0.5 * W,
-    py: (ny + 0.5) * H
-  };
+  return { px:(nx+1)*0.5*W, py:(ny+0.5)*H };
 }
 
-// ── Skeleton ──
-const BONES = [
+// ── Bones ──
+const BONES=[
   ['Head','Neck'],['Neck','SpineShoulder'],
   ['SpineShoulder','SpineMid'],['SpineMid','SpineBase'],
-  ['SpineShoulder','ShoulderLeft'],['ShoulderLeft','ElbowLeft'],
-  ['ElbowLeft','WristLeft'],['WristLeft','HandLeft'],
-  ['SpineShoulder','ShoulderRight'],['ShoulderRight','ElbowRight'],
-  ['ElbowRight','WristRight'],['WristRight','HandRight'],
+  ['SpineShoulder','ShoulderLeft'],['ShoulderLeft','ElbowLeft'],['ElbowLeft','WristLeft'],['WristLeft','HandLeft'],
+  ['SpineShoulder','ShoulderRight'],['ShoulderRight','ElbowRight'],['ElbowRight','WristRight'],['WristRight','HandRight'],
   ['SpineBase','HipLeft'],['HipLeft','KneeLeft'],['KneeLeft','AnkleLeft'],['AnkleLeft','FootLeft'],
   ['SpineBase','HipRight'],['HipRight','KneeRight'],['KneeRight','AnkleRight'],['AnkleRight','FootRight'],
 ];
 
-let lastBodies = [];
-let fps = 0, frameCount = 0, lastFpsTime = Date.now();
-
-// ── Target silhouette (ideal centred body) ──
-// These are screen fractions [0..1] x,y — drawn as guide
-const TARGET = {
-  Head:           [0.5,  0.12],
-  Neck:           [0.5,  0.20],
-  SpineShoulder:  [0.5,  0.25],
-  ShoulderLeft:   [0.40, 0.25],
-  ShoulderRight:  [0.60, 0.25],
-  SpineMid:       [0.5,  0.42],
-  SpineBase:      [0.5,  0.55],
-  HipLeft:        [0.44, 0.55],
-  HipRight:       [0.56, 0.55],
-  KneeLeft:       [0.43, 0.72],
-  KneeRight:      [0.57, 0.72],
-  AnkleLeft:      [0.43, 0.88],
-  AnkleRight:     [0.57, 0.88],
+const TARGET={
+  Head:[0.5,0.12],Neck:[0.5,0.20],SpineShoulder:[0.5,0.25],
+  ShoulderLeft:[0.38,0.25],ShoulderRight:[0.62,0.25],
+  SpineMid:[0.5,0.42],SpineBase:[0.5,0.55],
+  HipLeft:[0.44,0.55],HipRight:[0.56,0.55],
+  KneeLeft:[0.43,0.72],KneeRight:[0.57,0.72],
+  AnkleLeft:[0.43,0.88],AnkleRight:[0.57,0.88],
 };
 
-function drawTarget() {
-  ctx.globalAlpha = 0.12;
-  ctx.strokeStyle = '#0af';
-  ctx.lineWidth   = 2;
-  BONES.forEach(([a,b]) => {
-    if (!TARGET[a] || !TARGET[b]) return;
+let lastBodies=[], fps=0, frameCount=0, lastFpsTime=Date.now();
+
+function drawTarget(){
+  ctx.globalAlpha=0.13; ctx.strokeStyle='#0af'; ctx.lineWidth=2;
+  BONES.forEach(([a,b])=>{
+    if(!TARGET[a]||!TARGET[b])return;
     ctx.beginPath();
-    ctx.moveTo(TARGET[a][0]*W, TARGET[a][1]*H);
-    ctx.lineTo(TARGET[b][0]*W, TARGET[b][1]*H);
+    ctx.moveTo(TARGET[a][0]*W,TARGET[a][1]*H);
+    ctx.lineTo(TARGET[b][0]*W,TARGET[b][1]*H);
     ctx.stroke();
   });
-  // Head circle
-  ctx.beginPath();
-  ctx.arc(TARGET.Head[0]*W, TARGET.Head[1]*H, 22, 0, Math.PI*2);
-  ctx.strokeStyle = '#0af';
-  ctx.stroke();
-  ctx.globalAlpha = 1;
+  ctx.beginPath(); ctx.arc(TARGET.Head[0]*W,TARGET.Head[1]*H,22,0,Math.PI*2);
+  ctx.strokeStyle='#0af'; ctx.stroke();
+  ctx.globalAlpha=1;
 }
 
-function drawSkeleton(bodies) {
-  bodies.forEach((body, bi) => {
-    const j   = body.joints;
-    const col = '#00e5ff';
-
-    // Bones
-    BONES.forEach(([a,b]) => {
-      if (!j[a]||!j[b]||!j[a].tracked||!j[b].tracked) return;
-      const pa = applyKToC(j[a].x, j[a].y);
-      const pb = applyKToC(j[b].x, j[b].y);
-      ctx.beginPath();
-      ctx.moveTo(pa.px, pa.py);
-      ctx.lineTo(pb.px, pb.py);
-      ctx.strokeStyle = col + 'aa';
-      ctx.lineWidth = 2;
-      ctx.stroke();
+function drawSkeleton(bodies){
+  bodies.forEach((body,bi)=>{
+    const j=body.joints, col='#00e5ff';
+    BONES.forEach(([a,b])=>{
+      if(!j[a]||!j[b]||!j[a].tracked||!j[b].tracked)return;
+      const pa=applyKToC(j[a].x,j[a].y), pb=applyKToC(j[b].x,j[b].y);
+      ctx.beginPath(); ctx.moveTo(pa.px,pa.py); ctx.lineTo(pb.px,pb.py);
+      ctx.strokeStyle=col+'aa'; ctx.lineWidth=2; ctx.stroke();
     });
-
-    // Joints
-    Object.entries(j).forEach(([name, jt]) => {
-      if (!jt.tracked) return;
-      const {px, py} = applyKToC(jt.x, jt.y);
-      const isKey = ['Head','HandLeft','HandRight','SpineBase','SpineShoulder'].includes(name);
-      ctx.beginPath();
-      ctx.arc(px, py, isKey ? 7 : 4, 0, Math.PI*2);
-      ctx.fillStyle = isKey ? col : col + '66';
-      ctx.fill();
+    Object.entries(j).forEach(([name,jt])=>{
+      if(!jt.tracked)return;
+      const {px,py}=applyKToC(jt.x,jt.y);
+      const isKey=['Head','HandLeft','HandRight','SpineBase','SpineShoulder'].includes(name);
+      ctx.beginPath(); ctx.arc(px,py,isKey?7:4,0,Math.PI*2);
+      ctx.fillStyle=isKey?col:col+'66'; ctx.fill();
     });
-
-    // Head label
-    if (j.Head && j.Head.tracked) {
-      const {px, py} = applyKToC(j.Head.x, j.Head.y);
-      ctx.fillStyle = col;
-      ctx.font = 'bold 11px Courier New';
-      ctx.textAlign = 'center';
-      ctx.fillText('P' + (bi+1) + '  z=' + j.Head.z.toFixed(2) + 'm', px, py - 16);
+    if(j.Head&&j.Head.tracked){
+      const {px,py}=applyKToC(j.Head.x,j.Head.y);
+      ctx.fillStyle=col; ctx.font='bold 11px Courier New';
+      ctx.textAlign='center';
+      ctx.fillText('P'+(bi+1)+'  z='+j.Head.z.toFixed(2)+'m',px,py-16);
     }
   });
 }
 
-// ── AUTO-FIT ──
-let fitCapture = null;
-
-function startAutoFit() {
-  document.getElementById('autofit').style.display = 'flex';
-  document.getElementById('fitResult').textContent = '';
-  let count = 3;
-  document.getElementById('countdown').textContent = count;
-
-  const tick = setInterval(() => {
+// ── Auto-fit ──
+function startAutoFit(){
+  const el=document.getElementById('autofit');
+  el.style.display='flex';
+  document.getElementById('fitResult').textContent='';
+  let count=3;
+  document.getElementById('countdown').textContent=count;
+  const tick=setInterval(()=>{
     count--;
-    if (count > 0) {
-      document.getElementById('countdown').textContent = count;
-    } else {
+    if(count>0){ document.getElementById('countdown').textContent=count; }
+    else{
       clearInterval(tick);
-      document.getElementById('countdown').textContent = '📸';
-      // Capture current body
-      if (!lastBodies.length) {
-        document.getElementById('fitResult').textContent = '❌ No body detected — try again';
-        setTimeout(() => document.getElementById('autofit').style.display = 'none', 2000);
-        return;
+      document.getElementById('countdown').textContent='📸';
+      if(!lastBodies.length){
+        document.getElementById('fitResult').textContent='❌ No body — try again';
+        setTimeout(()=>el.style.display='none',2000); return;
       }
       autoFit(lastBodies[0]);
     }
-  }, 1000);
+  },1000);
 }
 
-function autoFit(body) {
-  const j = body.joints;
-
-  // We need at least head + hips
-  if (!j.Head || !j.Head.tracked || !j.SpineBase || !j.SpineBase.tracked) {
-    document.getElementById('fitResult').textContent = '❌ Need full body visible';
-    setTimeout(() => document.getElementById('autofit').style.display = 'none', 2000);
-    return;
+function autoFit(body){
+  const j=body.joints;
+  if(!j.Head||!j.Head.tracked||!j.SpineBase||!j.SpineBase.tracked){
+    document.getElementById('fitResult').textContent='❌ Need full body visible';
+    setTimeout(()=>document.getElementById('autofit').style.display='none',2000); return;
   }
-
-  // Raw Kinect coords
-  const rawHead  = { x: j.Head.x,      y: j.Head.y      };
-  const rawBase  = { x: j.SpineBase.x, y: j.SpineBase.y };
-  const rawShL   = j.ShoulderLeft  && j.ShoulderLeft.tracked  ? { x: j.ShoulderLeft.x,  y: j.ShoulderLeft.y  } : null;
-  const rawShR   = j.ShoulderRight && j.ShoulderRight.tracked ? { x: j.ShoulderRight.x, y: j.ShoulderRight.y } : null;
-
-  // Step 1: find tilt — angle of head-to-base vector vs vertical
-  const dx = rawHead.x - rawBase.x;
-  const dy = rawHead.y - rawBase.y;
-  // In Kinect space, head should be directly above base (dx~0, dy>0)
-  // Tilt = angle of this vector from vertical
-  const tilt = Math.atan2(dx, dy) * 180 / Math.PI;
-  cal.tilt = -tilt;
-
-  // Step 2: apply tilt rotation to get corrected coords
-  function rotated(x, y) {
-    const rad = cal.tilt * Math.PI / 180;
-    return { x: x * Math.cos(rad) - y * Math.sin(rad), y: x * Math.sin(rad) + y * Math.cos(rad) };
-  }
-
-  const rHead = rotated(rawHead.x, rawHead.y);
-  const rBase = rotated(rawBase.x, rawBase.y);
-
-  // Step 3: offset — centre of body (midpoint head/base) should map to screen centre (0,0 in norm space)
-  const midX = (rHead.x + rBase.x) / 2;
-  const midY = (rHead.y + rBase.y) / 2;
-  cal.xOff = -midX;
-  cal.yOff = midY;
-
-  // Step 4: scale — body height in Kinect space should span ~75% of screen height
-  const bodyHeight = Math.abs(rHead.y - rBase.y);
-  const targetHeight = 0.75; // fraction of screen in normalised coords (screen half = 1.2)
-  const targetKinect = targetHeight * 1.2;
-  const sc = bodyHeight > 0 ? targetKinect / bodyHeight : 1;
-  cal.xSc = sc;
-  cal.ySc = sc;
+  const hx=j.Head.x,hy=j.Head.y,bx=j.SpineBase.x,by=j.SpineBase.y;
+  // Tilt: angle of head-base vector from vertical
+  cal.tilt = -Math.atan2(hx-bx, hy-by)*180/Math.PI;
+  // Rotate
+  function rot(x,y){ const r=cal.tilt*Math.PI/180,c=Math.cos(r),s=Math.sin(r); return {x:x*c-y*s,y:x*s+y*c}; }
+  const rH=rot(hx,hy), rB=rot(bx,by);
+  // Centre on body midpoint
+  cal.xOff = -((rH.x+rB.x)/2);
+  cal.yOff =  (rH.y+rB.y)/2;
+  // Scale to fill ~75% height
+  const bodyH=Math.abs(rH.y-rB.y);
+  const sc=bodyH>0?(0.75*1.2)/bodyH:1;
+  cal.xSc=sc; cal.ySc=sc;
 
   updateCalDisplay();
-  document.getElementById('fitResult').textContent =
-    '✓ Done! tilt=' + cal.tilt.toFixed(1) + '° sc=' + sc.toFixed(2);
-  log('Auto-fit: tilt=' + cal.tilt.toFixed(1) + ' xOff=' + cal.xOff.toFixed(2) + ' sc=' + sc.toFixed(2));
-
-  setTimeout(() => {
-    document.getElementById('autofit').style.display = 'none';
-  }, 2000);
+  // Broadcast to remote WS clients
+  broadcastCal();
+  document.getElementById('fitResult').textContent='✓ Done! tilt='+cal.tilt.toFixed(1)+'° sc='+sc.toFixed(2);
+  log('Auto-fit done');
+  setTimeout(()=>document.getElementById('autofit').style.display='none',2000);
 }
 
-function updateCalDisplay() {
-  document.getElementById('calDisplay').innerHTML =
-    'tilt: <b>' + cal.tilt.toFixed(1) + '°</b><br>' +
-    'xOff: <b>' + cal.xOff.toFixed(2) + '</b>  yOff: <b>' + cal.yOff.toFixed(2) + '</b><br>' +
-    'scale: <b>' + cal.xSc.toFixed(2) + '</b>';
+function updateCalDisplay(){
+  document.getElementById('calDisplay').innerHTML=
+    'tilt: <b>'+cal.tilt.toFixed(1)+'°</b><br>'+
+    'xOff: <b>'+cal.xOff.toFixed(2)+'</b>  yOff: <b>'+cal.yOff.toFixed(2)+'</b><br>'+
+    'scale: <b>'+cal.xSc.toFixed(2)+'</b>';
 }
 
-// ── Draw ──
-function draw() {
-  ctx.fillStyle = '#0a0a12';
-  ctx.fillRect(0, 0, W, H);
-
-  // Grid
-  ctx.strokeStyle = 'rgba(255,255,255,0.03)';
-  ctx.lineWidth = 1;
-  for (let x=0; x<W; x+=60) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
-  for (let y=0; y<H; y+=60) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
-
-  // Centre cross
-  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-  ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(0,H/2); ctx.lineTo(W,H/2); ctx.stroke();
-
+// ── Draw loop ──
+function draw(){
+  ctx.fillStyle='#0a0a12'; ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='rgba(255,255,255,0.03)'; ctx.lineWidth=1;
+  for(let x=0;x<W;x+=60){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<H;y+=60){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  ctx.strokeStyle='rgba(255,255,255,0.06)';
+  ctx.beginPath();ctx.moveTo(W/2,0);ctx.lineTo(W/2,H);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(0,H/2);ctx.lineTo(W,H/2);ctx.stroke();
   drawTarget();
-
-  if (!lastBodies.length) {
-    ctx.fillStyle = '#222';
-    ctx.font = '14px Courier New';
-    ctx.textAlign = 'center';
-    ctx.fillText('Waiting for body…', W/2, H/2);
-  } else {
-    drawSkeleton(lastBodies);
-  }
+  if(!lastBodies.length){
+    ctx.fillStyle='#222'; ctx.font='14px Courier New'; ctx.textAlign='center';
+    ctx.fillText('Waiting for body…',W/2,H/2);
+  } else drawSkeleton(lastBodies);
 }
-
-function loop() { draw(); requestAnimationFrame(loop); }
+function loop(){ draw(); requestAnimationFrame(loop); }
 loop();
 
-// ── WebSocket ──
+// ── Kinect WebSocket ──
 let ws;
-function connect() {
-  const host = document.getElementById('host-input').value.trim() || 'localhost';
-  if (ws) try { ws.close(); } catch(e) {}
-  log('Connecting to ' + host + ':8765…');
-  ws = new WebSocket('ws://' + host + ':8765/');
-  ws.onopen  = () => { document.getElementById('dot').classList.add('on'); document.getElementById('stext').textContent = 'Connected — ' + host; log('Connected'); };
-  ws.onclose = () => { document.getElementById('dot').classList.remove('on'); document.getElementById('stext').textContent = 'Disconnected'; lastBodies=[]; setTimeout(connect,3000); };
-  ws.onerror = () => {};
-  ws.onmessage = (evt) => {
-    let msg; try { msg=JSON.parse(evt.data); } catch(e) { return; }
-    if (msg.type !== 'bodies') return;
-    lastBodies = msg.bodies || [];
+function connect(){
+  const host=document.getElementById('host-input').value.trim()||'localhost';
+  if(ws)try{ws.close()}catch(e){}
+  log('Connecting to '+host+'…');
+  ws=new WebSocket('ws://'+host+':8765/');
+  ws.onopen=()=>{ document.getElementById('dot').classList.add('on'); document.getElementById('stext').textContent='Kinect: '+host; log('Kinect connected'); };
+  ws.onclose=()=>{ document.getElementById('dot').classList.remove('on'); document.getElementById('stext').textContent='Kinect disconnected'; lastBodies=[]; setTimeout(connect,3000); };
+  ws.onerror=()=>{};
+  ws.onmessage=(evt)=>{
+    let msg; try{msg=JSON.parse(evt.data)}catch(e){return;}
+    // Remote commands forwarded by bridge
+    if(msg.type==='remote-autofit'){ startAutoFit(); return; }
+    if(msg.type==='remote-cal'){ Object.assign(cal,msg.cal); updateCalDisplay(); return; }
+    if(msg.type==='remote-reset'){ cal={xOff:0,yOff:0,xSc:1,ySc:1,tilt:0}; updateCalDisplay(); return; }
+    if(msg.type!=='bodies')return;
+    lastBodies=msg.bodies||[];
     frameCount++;
-    const now = Date.now();
-    if (now - lastFpsTime >= 1000) { fps=frameCount; frameCount=0; lastFpsTime=now; document.getElementById('fpsText').textContent=fps+' fps'; }
-    document.getElementById('bodyCount').textContent = 'Bodies: ' + lastBodies.length;
+    const now=Date.now();
+    if(now-lastFpsTime>=1000){fps=frameCount;frameCount=0;lastFpsTime=now;document.getElementById('fpsText').textContent=fps+' fps';}
+    document.getElementById('bodyCount').textContent='Bodies: '+lastBodies.length;
   };
 }
-document.getElementById('connect-btn').onclick = connect;
+document.getElementById('connect-btn').onclick=connect;
 connect();
 
-// ── Log ──
-const logLines = [];
-function log(msg) {
-  const t = new Date().toLocaleTimeString('en',{hour12:false});
-  logLines.push('['+t+'] '+msg);
-  if (logLines.length > 5) logLines.shift();
-  document.getElementById('log').textContent = logLines.join('\n');
+// ── Remote WebSocket server (phone connects here) ──
+// Phone opens ws://192.168.0.20:8766
+// We run a tiny WS server by serving commands back
+// Since browser can't run WS server, we use a shared channel via Kinect bridge port trick
+// Instead: phone hits a simple HTTP endpoint we expose via a second WS on the bridge
+// SIMPLEST: phone just opens the debug page URL with ?remote=1 and communicates via BroadcastChannel
+// Actually: use BroadcastChannel — works same-origin, so phone needs same page
+// REAL solution: add a second WebSocket server to KinectBridge.cs on port 8766 for remote commands
+
+// For now use the simpler approach: remote page connects to port 8766 on the PC
+// KinectBridge will forward commands. But we don't have that yet.
+// So: use a polling approach — remote page POSTs to a tiny express server
+// OR: just hardcode the remote URL with the PC IP and use BroadcastChannel won't work cross-device
+
+// ── REAL SIMPLE: expose a WebSocket on 8766 from KinectBridge ──
+// For now, wire remote commands via the existing Kinect WS by sending special JSON
+let remoteWs=null, remoteClients=[];
+
+// We'll start a second WS listener inside the bridge — but for now
+// let's use a relay: remote connects to ws://PC_IP:8766
+// and we receive those commands here via a local WS on 8766
+
+// Since browser can't open server ports, use a workaround:
+// The remote page connects to the SAME bridge port (8765) with a special handshake
+let remoteCommandWs;
+function listenForRemote(){
+  // Connect to bridge port — bridge will echo back any non-body messages
+  // Actually just use a second connection and tag it
+  remoteCommandWs = new WebSocket('ws://'+(document.getElementById('host-input').value.trim()||'localhost')+':8765/');
+  remoteCommandWs.onmessage=(evt)=>{
+    let msg; try{msg=JSON.parse(evt.data)}catch(e){return;}
+    if(msg.type==='remote-autofit') startAutoFit();
+    if(msg.type==='remote-cal'){ Object.assign(cal,msg.cal); updateCalDisplay(); }
+    if(msg.type==='remote-reset'){ cal={xOff:0,yOff:0,xSc:1,ySc:1,tilt:0}; updateCalDisplay(); }
+  };
 }
 
-// ── PeerJS ──
-const DEBUG_PEER_ID = 'kinect-debug-mac';
-function initPeer() {
-  const s = document.createElement('script');
-  s.src = 'https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js';
-  s.onload = () => {
-    const p = new Peer(DEBUG_PEER_ID);
-    p.on('open', () => log('Peer ready: ' + DEBUG_PEER_ID));
-    p.on('connection', conn => {
-      log('Phone connected');
-      conn.on('data', msg => {
-        if (msg.type === 'autofit') startAutoFit();
-        if (msg.type === 'cal') { Object.assign(cal, msg.cal); updateCalDisplay(); }
-        if (msg.type === 'reset') { cal={xOff:0,yOff:0,xSc:1,ySc:1,tilt:0}; updateCalDisplay(); }
-      });
-    });
-    p.on('error', () => setTimeout(initPeer, 5000));
-  };
-  document.head.appendChild(s);
+function broadcastCal(){ /* placeholder */ }
+
+// ── QR Code ──
+function showQR(){
+  const ip=document.getElementById('host-input').value.trim()||'192.168.0.20';
+  const url='https://maciek11123.github.io/Kid-Games/debug-remote.html?host='+encodeURIComponent(ip);
+  document.getElementById('qrUrl').textContent=url;
+  const qrSrc='https://api.qrserver.com/v1/create-qr-code/?size=200x200&data='+encodeURIComponent(url);
+  document.getElementById('qrImg').src=qrSrc;
 }
-initPeer();
+
+document.getElementById('btn-qr').onclick=()=>{
+  showQR();
+  document.getElementById('qrOverlay').style.display='flex';
+};
+document.getElementById('btnDismiss').onclick=()=>{
+  document.getElementById('qrOverlay').style.display='none';
+};
+
+// Auto-show QR on load with default IP
+showQR();
+
+// ── Log ──
+const logLines=[];
+function log(msg){
+  const t=new Date().toLocaleTimeString('en',{hour12:false});
+  logLines.push('['+t+'] '+msg);
+  if(logLines.length>5)logLines.shift();
+  document.getElementById('log').textContent=logLines.join('\n');
+}
 </script>
 </body>
 </html>
