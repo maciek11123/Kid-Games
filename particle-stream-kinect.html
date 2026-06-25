@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Magic Wall — Kinect Particles</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; overflow: hidden; font-family: system-ui, sans-serif; }
+  canvas { display: block; }
+
+  /* ── HUD ── */
+  #hud {
+    position: fixed; top: 12px; left: 12px;
+    color: rgba(255,255,255,0.7); font-size: 12px; pointer-events: none;
+    text-shadow: 0 1px 3px #000;
+  }
+  #hud .row { margin-bottom: 3px; }
+  #hud .dot { display: inline-block; width: 8px; height: 8px;
+              border-radius: 50%; background: #f00; margin-right: 6px; vertical-align: middle; }
+  #hud .dot.on { background: #0f0; }
+
+  /* ── Control Panel ── */
+  #panel {
+    position: fixed; top: 12px; right: 12px;
+    background: rgba(0,0,0,0.7); border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 10px; padding: 14px 16px; width: 240px;
+    color: #ccc; font-size: 12px;
+    backdrop-filter: blur(8px);
+  }
+  #panel h3 { font-size: 13px; color: #fff; margin-bottom: 10px; }
+  #panel .group { margin-bottom: 10px; }
+  #panel label { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  #panel input[type=range] { width: 100%; accent-color: #6af; }
+  #panel select, #panel button {
+    width: 100%; margin-top: 4px; padding: 4px 6px;
+    background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+    color: #fff; border-radius: 5px; cursor: pointer; font-size: 12px;
+  }
+  #panel button:hover { background: rgba(255,255,255,0.2); }
+  #panel .row2 { display: flex; gap: 6px; }
+  #panel .row2 button { flex: 1; }
+  #panel .sep { border-top: 1px solid rgba(255,255,255,0.1); margin: 8px 0; }
+
+  /* ── Debug overlay toggle ── */
+  #dbgCanvas {
+    position: fixed; top: 0; left: 0;
+    pointer-events: none; display: none;
+  }
+</style>
+</head>
+<body>
+
+<!-- Three.js CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<!-- HUD -->
+<div id="hud">
+  <div class="row"><span class="dot" id="kinectDot"></span><span id="kinectStatus">Kinect: disconnected</span></div>
+  <div class="row" id="bodyCount">Bodies: 0</div>
+  <div class="row" id="fpsDisplay">FPS: --</div>
+  <div class="row" id="particleCount">Particles: --</div>
+</div>
+
+<!-- Control Panel -->
+<div id="panel">
+  <h3>✦ Magic Wall</h3>
+
+  <div class="group">
+    <label>Profile
+      <select id="profileSel">
+        <option value="tv">4K TV</option>
+        <option value="projector" selected>Projector</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="group">
+    <label>Mode
+      <select id="modeSel">
+        <option value="explosion" selected>Explosion</option>
+        <option value="gravity">Gravity</option>
+        <option value="ripple">Ripple</option>
+        <option value="attract">Attract</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="sep"></div>
+
+  <div class="group">
+    <label>Force Scale <span id="forceVal">1.0</span></label>
+    <input type="range" id="forceSlider" min="0.1" max="5" step="0.1" value="1.0">
+  </div>
+
+  <div class="group">
+    <label>Particle Count <span id="countVal">80k</span></label>
+    <input type="range" id="countSlider" min="10000" max="300000" step="5000" value="80000">
+  </div>
+
+  <div class="group">
+    <label>Particle Size <span id="sizeVal">3</span></label>
+    <input type="range" id="sizeSlider" min="1" max="12" step="0.5" value="3">
+  </div>
+
+  <div class="sep"></div>
+
+  <div class="group">
+    <label>Sensor Rotation
+      <select id="rotSel">
+        <option value="0">Normal (facing you)</option>
+        <option value="90cw" selected>90° CW (pointing left)</option>
+        <option value="90ccw">90° CCW (pointing right)</option>
+        <option value="180">180° (behind you)</option>
+      </select>
+    </label>
+    <label style="margin-top:4px">Flip X <input type="checkbox" id="flipX"></label>
+    <label>Flip Y <input type="checkbox" id="flipY"></label>
+  </div>
+
+  <div class="sep"></div>
+
+  <div class="group">
+    <label>X Offset <span id="xOffVal">0.00</span></label>
+    <input type="range" id="xOffset" min="-1" max="1" step="0.01" value="0">
+  </div>
+  <div class="group">
+    <label>Y Offset <span id="yOffVal">0.00</span></label>
+    <input type="range" id="yOffset" min="-1" max="1" step="0.01" value="0">
+  </div>
+  <div class="group">
+    <label>X Scale <span id="xScVal">1.00</span></label>
+    <input type="range" id="xScale" min="0.3" max="3" step="0.05" value="1.0">
+  </div>
+  <div class="group">
+    <label>Y Scale <span id="yScVal">1.00</span></label>
+    <input type="range" id="yScale" min="0.3" max="3" step="0.05" value="1.0">
+  </div>
+  <div class="group">
+    <label>Wall Z (m) <span id="wallZVal">1.50</span></label>
+    <input type="range" id="wallZ" min="0.5" max="4" step="0.05" value="1.5">
+  </div>
+
+  <div class="sep"></div>
+
+  <div class="row2">
+    <button id="btnDebug">Debug OFF</button>
+    <button id="btnPanel">Hide Panel</button>
+  </div>
+
+  <div class="sep"></div>
+
+  <div class="group">
+    <label>WS Host <input id="wsHost" type="text" value="localhost"
+      style="width:110px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);
+             color:#fff;border-radius:4px;padding:2px 4px;font-size:11px;"></label>
+    <button id="btnConnect">Connect</button>
+  </div>
+</div>
+
+<!-- Debug skeleton canvas -->
+<canvas id="dbgCanvas"></canvas>
+
+<script>
+// ════════════════════════════════════════════════════════════════
+//  PROFILES
+// ════════════════════════════════════════════════════════════════
+const PROFILES = {
+  tv: {
+    particleCount: 200000,
+    particleSize:  1.5,
+    blending:      THREE.NormalBlending,
+    colors:        ['#ffffff','#88ccff','#ffaacc'],
+    damping:       0.985,
+    returnForce:   0.015,
+    forceScale:    1.0,
+  },
+  projector: {
+    particleCount: 80000,
+    particleSize:  3.5,
+    blending:      THREE.AdditiveBlending,
+    colors:        ['#ffffff','#aaff88','#ff8844','#88aaff'],
+    damping:       0.975,
+    returnForce:   0.012,
+    forceScale:    1.4,
+  }
+};
+
+// ════════════════════════════════════════════════════════════════
+//  THREE.JS SETUP
+// ════════════════════════════════════════════════════════════════
+const W = window.innerWidth, H = window.innerHeight;
+const renderer = new THREE.WebGLRenderer({ antialias: false });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(W, H);
+document.body.appendChild(renderer.domElement);
+
+const scene  = new THREE.Scene();
+const camera = new THREE.OrthographicCamera(-W/2, W/2, H/2, -H/2, 1, 1000);
+camera.position.z = 100;
+
+// ── Particle system ───────────────────────────────────────────
+let pCount, positions, velocities, origins, colors_arr, geometry, points, material;
+
+function initParticles(count, profile) {
+  if (points) { scene.remove(points); geometry.dispose(); material.dispose(); }
+
+  pCount    = count;
+  positions  = new Float32Array(pCount * 3);
+  velocities = new Float32Array(pCount * 3);
+  origins    = new Float32Array(pCount * 3);
+  colors_arr = new Float32Array(pCount * 3);
+
+  const cols = profile.colors.map(c => new THREE.Color(c));
+
+  for (let i = 0; i < pCount; i++) {
+    const x = (Math.random() - 0.5) * W;
+    const y = (Math.random() - 0.5) * H;
+    positions[i*3]   = origins[i*3]   = x;
+    positions[i*3+1] = origins[i*3+1] = y;
+    positions[i*3+2] = origins[i*3+2] = 0;
+
+    const col = cols[Math.floor(Math.random() * cols.length)];
+    colors_arr[i*3]   = col.r;
+    colors_arr[i*3+1] = col.g;
+    colors_arr[i*3+2] = col.b;
+  }
+
+  geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('color',    new THREE.BufferAttribute(colors_arr, 3));
+
+  material = new THREE.PointsMaterial({
+    size:           profile.particleSize,
+    vertexColors:   true,
+    blending:       profile.blending,
+    depthWrite:     false,
+    transparent:    true,
+    opacity:        0.85,
+  });
+
+  points = new THREE.Points(geometry, material);
+  scene.add(points);
+}
+
+// ── Active profile + live overrides ──────────────────────────
+let profile  = { ...PROFILES.projector };
+let mode     = 'explosion';
+let debugOn  = false;
+
+// Calibration
+let cal = { xOff: 0, yOff: 0, xSc: 1, ySc: 1, wallZ: 1.5, forceScale: 1 };
+
+initParticles(profile.particleCount, profile);
+
+// ════════════════════════════════════════════════════════════════
+//  TOUCH SOURCES  (Kinect joints feed into this)
+// ════════════════════════════════════════════════════════════════
+const activeTouches = new Map();  // id → { nx, ny, depth, pressure, vx, vy }
+
+function setTouch(id, nx, ny, depth) {
+  const prev = activeTouches.get(id);
+  const vx   = prev ? (nx - prev.nx) * 60 : 0;
+  const vy   = prev ? (ny - prev.ny) * 60 : 0;
+  const pressure = Math.max(0, 1 - depth / cal.wallZ);
+  activeTouches.set(id, { nx, ny, depth, pressure, vx, vy });
+}
+
+function clearTouchesForBody(bodyId) {
+  for (const [k] of activeTouches) {
+    if (k.startsWith(`b${bodyId}_`)) activeTouches.delete(k);
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  WEBSOCKET — KINECT BRIDGE
+// ════════════════════════════════════════════════════════════════
+let ws, wsConnected = false;
+
+function connect() {
+  const host = document.getElementById('wsHost').value.trim() || 'localhost';
+  if (ws) try { ws.close(); } catch(e) {}
+
+  ws = new WebSocket(`ws://${host}:8765/`);
+
+  ws.onopen = () => {
+    wsConnected = true;
+    document.getElementById('kinectDot').classList.add('on');
+    document.getElementById('kinectStatus').textContent = `Kinect: ${host}:8765`;
+  };
+
+  ws.onclose = () => {
+    wsConnected = false;
+    document.getElementById('kinectDot').classList.remove('on');
+    document.getElementById('kinectStatus').textContent = 'Kinect: disconnected';
+    activeTouches.clear();
+    setTimeout(connect, 3000); // auto-reconnect
+  };
+
+  ws.onerror = () => {};
+
+  ws.onmessage = (evt) => {
+    let msg;
+    try { msg = JSON.parse(evt.data); } catch(e) { return; }
+    if (msg.type !== 'bodies') return;
+
+    // Track which bodies we saw this frame
+    const seenBodies = new Set();
+
+    for (const body of msg.bodies) {
+      seenBodies.add(body.id);
+      const j = body.joints;
+
+      // Feed hands + wrists into touch system
+      feedJoint(body.id, 'HandLeft',   j.HandLeft);
+      feedJoint(body.id, 'HandRight',  j.HandRight);
+      feedJoint(body.id, 'WristLeft',  j.WristLeft);
+      feedJoint(body.id, 'WristRight', j.WristRight);
+      // Optionally feed feet for floor games
+      feedJoint(body.id, 'FootLeft',   j.FootLeft);
+      feedJoint(body.id, 'FootRight',  j.FootRight);
+    }
+
+    // Remove touches for bodies no longer tracked
+    for (const [k] of activeTouches) {
+      const bid = parseInt(k.split('_')[0].replace('b',''));
+      if (!seenBodies.has(bid)) activeTouches.delete(k);
+    }
+
+    document.getElementById('bodyCount').textContent = `Bodies: ${msg.bodies.length}`;
+
+    // Debug skeleton draw
+    if (debugOn) drawDebug(msg.bodies);
+  };
+}
+
+function feedJoint(bodyId, name, joint) {
+  if (!joint || !joint.tracked) return;
+
+  // Kinect camera space: X right, Y up, Z forward (meters)
+  // Apply sensor rotation first, then scale/offset
+  let rx = joint.x, ry = joint.y;
+  const rot = cal.rotation || '90cw';
+  if      (rot === '90cw')  { rx =  joint.y; ry = -joint.x; }  // sensor pointing left
+  else if (rot === '90ccw') { rx = -joint.y; ry =  joint.x; }  // sensor pointing right
+  else if (rot === '180')   { rx = -joint.x; ry = -joint.y; }  // sensor behind
+  // rot === '0': rx=joint.x, ry=joint.y (normal, facing you)
+
+  if (cal.flipX) rx = -rx;
+  if (cal.flipY) ry = -ry;
+
+  const nx = (rx * cal.xSc + cal.xOff);
+  const ny = (-ry * cal.ySc + cal.yOff);
+  const depth = joint.z;
+
+  setTouch(`b${bodyId}_${name}`, nx, ny, depth);
+}
+
+function kinectToPixel(nx, ny) {
+  return {
+    px: nx * (W / 2),
+    py: ny * (H / 2)
+  };
+}
+
+connect();
+document.getElementById('btnConnect').onclick = connect;
+
+// ════════════════════════════════════════════════════════════════
+//  PARTICLE PHYSICS
+// ════════════════════════════════════════════════════════════════
+function applyForces() {
+  const touches = [...activeTouches.values()];
+  if (touches.length === 0 && mode !== 'gravity') return;
+
+  const { damping, returnForce } = profile;
+  const fs = cal.forceScale;
+
+  for (let i = 0; i < pCount; i++) {
+    const ix = i * 3, iy = ix + 1;
+    let px = positions[ix], py = positions[iy];
+    let vx = velocities[ix], vy = velocities[iy];
+
+    for (const t of touches) {
+      const { px: tx, py: ty } = kinectToPixel(t.nx, t.ny);
+      const dx  = px - tx;
+      const dy  = py - ty;
+      const d2  = dx*dx + dy*dy;
+      const d   = Math.sqrt(d2) + 0.0001;
+      const pressure = t.pressure;
+
+      switch (mode) {
+        case 'explosion': {
+          const radius = 180 + pressure * 220;
+          if (d < radius) {
+            const strength = (1 - d/radius) * 18 * fs * (1 + pressure * 2);
+            vx += (dx/d) * strength + t.vx * 0.4;
+            vy += (dy/d) * strength + t.vy * 0.4;
+          }
+          break;
+        }
+        case 'gravity': {
+          const radius = 300;
+          if (d < radius) {
+            const strength = (1 - d/radius) * 12 * fs;
+            vx -= (dx/d) * strength;
+            vy -= (dy/d) * strength;
+          }
+          break;
+        }
+        case 'ripple': {
+          const radius = 250 + pressure * 150;
+          const inner  = radius * 0.5;
+          if (d < radius && d > inner) {
+            const wave = Math.sin((1 - (d - inner)/(radius - inner)) * Math.PI);
+            const str  = wave * 10 * fs;
+            vx += (dx/d) * str;
+            vy += (dy/d) * str;
+          }
+          break;
+        }
+        case 'attract': {
+          const radius = 350;
+          if (d < radius && d > 20) {
+            const strength = (1 - d/radius) * 10 * fs * (1 + pressure);
+            vx -= (dx/d) * strength;
+            vy -= (dy/d) * strength;
+          }
+          break;
+        }
+      }
+    }
+
+    // Return to origin
+    const ox = origins[ix], oy = origins[iy];
+    vx += (ox - px) * returnForce;
+    vy += (oy - py) * returnForce;
+
+    // Damping
+    vx *= damping;
+    vy *= damping;
+
+    positions[ix] = px + vx;
+    positions[iy] = py + vy;
+    velocities[ix] = vx;
+    velocities[iy] = vy;
+  }
+
+  geometry.attributes.position.needsUpdate = true;
+}
+
+// ════════════════════════════════════════════════════════════════
+//  DEBUG SKELETON
+// ════════════════════════════════════════════════════════════════
+const dbgCanvas = document.getElementById('dbgCanvas');
+const dbgCtx    = dbgCanvas.getContext('2d');
+
+function resizeDebug() {
+  dbgCanvas.width  = W;
+  dbgCanvas.height = H;
+}
+resizeDebug();
+
+const SKELETON_BONES = [
+  ['Head','Neck'],['Neck','SpineShoulder'],
+  ['SpineShoulder','SpineMid'],['SpineMid','SpineBase'],
+  ['SpineShoulder','ShoulderLeft'],['ShoulderLeft','ElbowLeft'],
+  ['ElbowLeft','WristLeft'],['WristLeft','HandLeft'],
+  ['SpineShoulder','ShoulderRight'],['ShoulderRight','ElbowRight'],
+  ['ElbowRight','WristRight'],['WristRight','HandRight'],
+  ['SpineBase','HipLeft'],['HipLeft','KneeLeft'],
+  ['KneeLeft','AnkleLeft'],['AnkleLeft','FootLeft'],
+  ['SpineBase','HipRight'],['HipRight','KneeRight'],
+  ['KneeRight','AnkleRight'],['AnkleRight','FootRight'],
+];
+
+const BODY_COLORS = ['#ff4444','#44aaff','#44ff88','#ffaa44','#aa44ff','#ff44aa'];
+
+function drawDebug(bodies) {
+  dbgCtx.clearRect(0, 0, W, H);
+
+  for (const body of bodies) {
+    const col = BODY_COLORS[body.id % BODY_COLORS.length];
+    const j   = body.joints;
+
+    // Bones
+    dbgCtx.strokeStyle = col;
+    dbgCtx.lineWidth   = 2;
+    dbgCtx.globalAlpha = 0.7;
+    for (const [a, b] of SKELETON_BONES) {
+      if (!j[a] || !j[b] || !j[a].tracked || !j[b].tracked) continue;
+      const pa = kinectToPixel(j[a].x * cal.xSc + cal.xOff, -j[a].y * cal.ySc + cal.yOff);
+      const pb = kinectToPixel(j[b].x * cal.xSc + cal.xOff, -j[b].y * cal.ySc + cal.yOff);
+      dbgCtx.beginPath();
+      dbgCtx.moveTo(pa.px + W/2, pa.py + H/2);
+      dbgCtx.lineTo(pb.px + W/2, pb.py + H/2);
+      dbgCtx.stroke();
+    }
+
+    // Joints
+    dbgCtx.globalAlpha = 1;
+    for (const [name, jt] of Object.entries(j)) {
+      if (!jt.tracked) continue;
+      const { px, py } = kinectToPixel(jt.x * cal.xSc + cal.xOff, -jt.y * cal.ySc + cal.yOff);
+      const sx = px + W/2, sy = py + H/2;
+      const isHand = name.includes('Hand') || name.includes('Wrist');
+      const r = isHand ? 10 : 5;
+
+      dbgCtx.beginPath();
+      dbgCtx.arc(sx, sy, r, 0, Math.PI * 2);
+      dbgCtx.fillStyle = col;
+      dbgCtx.fill();
+
+      // Pressure ring for hands
+      if (isHand) {
+        const tid = `b${body.id}_${name}`;
+        const t = activeTouches.get(tid);
+        if (t && t.pressure > 0.05) {
+          dbgCtx.beginPath();
+          dbgCtx.arc(sx, sy, 14 + t.pressure * 30, 0, Math.PI * 2);
+          dbgCtx.strokeStyle = col;
+          dbgCtx.lineWidth   = 2;
+          dbgCtx.globalAlpha = t.pressure;
+          dbgCtx.stroke();
+          dbgCtx.globalAlpha = 1;
+          dbgCtx.fillStyle = col;
+          dbgCtx.font = '9px system-ui';
+          dbgCtx.fillText(`${jt.z.toFixed(2)}m`, sx + 14, sy + 12);
+        }
+      }
+    }
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  RENDER LOOP
+// ════════════════════════════════════════════════════════════════
+let lastTime = performance.now(), frameCount = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  applyForces();
+  renderer.render(scene, camera);
+
+  frameCount++;
+  const now = performance.now();
+  if (now - lastTime >= 1000) {
+    document.getElementById('fpsDisplay').textContent = `FPS: ${frameCount}`;
+    document.getElementById('particleCount').textContent = `Particles: ${pCount.toLocaleString()}`;
+    frameCount = 0;
+    lastTime = now;
+  }
+}
+animate();
+
+// ════════════════════════════════════════════════════════════════
+//  UI CONTROLS
+// ════════════════════════════════════════════════════════════════
+function slider(id, valId, decimals, cb) {
+  const el  = document.getElementById(id);
+  const val = document.getElementById(valId);
+  el.oninput = () => {
+    val.textContent = parseFloat(el.value).toFixed(decimals);
+    cb(parseFloat(el.value));
+  };
+}
+
+slider('forceSlider', 'forceVal', 1, v => { cal.forceScale = v; });
+slider('sizeSlider',  'sizeVal',  1, v => { if (material) material.size = v; });
+slider('xOffset',     'xOffVal',  2, v => { cal.xOff = v; });
+slider('yOffset',     'yOffVal',  2, v => { cal.yOff = v; });
+slider('xScale',      'xScVal',   2, v => { cal.xSc  = v; });
+slider('yScale',      'yScVal',   2, v => { cal.ySc  = v; });
+slider('wallZ',       'wallZVal', 2, v => { cal.wallZ = v; });
+
+document.getElementById('countSlider').oninput = function() {
+  const v = parseInt(this.value);
+  document.getElementById('countVal').textContent = Math.round(v/1000) + 'k';
+  initParticles(v, profile);
+};
+
+document.getElementById('profileSel').onchange = function() {
+  profile = { ...PROFILES[this.value] };
+  initParticles(parseInt(document.getElementById('countSlider').value), profile);
+};
+
+document.getElementById('modeSel').onchange = function() {
+  mode = this.value;
+};
+
+document.getElementById('btnDebug').onclick = function() {
+  debugOn = !debugOn;
+  dbgCanvas.style.display = debugOn ? 'block' : 'none';
+  this.textContent = debugOn ? 'Debug ON' : 'Debug OFF';
+  if (!debugOn) dbgCtx.clearRect(0, 0, W, H);
+};
+
+document.getElementById('btnPanel').onclick = function() {
+  const panel = document.getElementById('panel');
+  const hidden = panel.style.display === 'none';
+  panel.style.display = hidden ? 'block' : 'none';
+  this.textContent = hidden ? 'Hide Panel' : 'Show Panel';
+};
+
+// Resize
+window.addEventListener('resize', () => {
+  const nw = window.innerWidth, nh = window.innerHeight;
+  renderer.setSize(nw, nh);
+  camera.left   = -nw/2; camera.right  = nw/2;
+  camera.top    =  nh/2; camera.bottom = -nh/2;
+  camera.updateProjectionMatrix();
+  dbgCanvas.width = nw; dbgCanvas.height = nh;
+});
+
+// ════════════════════════════════════════════════════════════════
+//  PEERJS REMOTE
+// ════════════════════════════════════════════════════════════════
+const WALL_PEER_ID = 'kinect-wall-mac';
+let peer, peerReady = false;
+
+function initPeer() {
+  const script = document.createElement('script');
+  script.src = 'https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js';
+  script.onload = () => {
+    peer = new Peer(WALL_PEER_ID);
+    peer.on('open', () => {
+      peerReady = true;
+      console.log('[PEER] Wall listening as: ' + WALL_PEER_ID);
+    });
+    peer.on('connection', conn => {
+      conn.on('data', handleRemote);
+    });
+    peer.on('error', e => {
+      // ID taken — try reconnect after delay
+      setTimeout(initPeer, 5000);
+    });
+  };
+  document.head.appendChild(script);
+}
+initPeer();
+
+// Last known body head position for Centre Me
+let lastHeadX = 0, lastHeadY = 0;
+
+function handleRemote(msg) {
+  switch(msg.type) {
+    case 'centre':
+      // Shift offsets so head lands at 0,0 (centre)
+      cal.xOff -= lastHeadX;
+      cal.yOff -= lastHeadY;
+      syncPanelToCal();
+      break;
+    case 'cal':
+      Object.assign(cal, msg.cal);
+      syncPanelToCal();
+      break;
+    case 'mode':
+      mode = msg.value;
+      document.getElementById('modeSel').value = mode;
+      break;
+    case 'force':
+      cal.forceScale = msg.value;
+      document.getElementById('forceSlider').value = msg.value;
+      document.getElementById('forceVal').textContent = msg.value.toFixed(1);
+      break;
+  }
+}
+
+function syncPanelToCal() {
+  const set = (id, vid, val, dec) => {
+    const el = document.getElementById(id);
+    const vl = document.getElementById(vid);
+    if(el) el.value = val;
+    if(vl) vl.textContent = parseFloat(val).toFixed(dec);
+  };
+  set('xOffset','xOffVal', cal.xOff, 2);
+  set('yOffset','yOffVal', cal.yOff, 2);
+  set('xScale', 'xScVal',  cal.xSc,  2);
+  set('yScale', 'yScVal',  cal.ySc,  2);
+  set('wallZ',  'wallZVal',cal.wallZ, 2);
+}
+
+// Track head position for Centre Me
+const _origOnMsg = ws ? ws.onmessage : null;
+function patchWsForHead() {
+  if (!ws) { setTimeout(patchWsForHead, 500); return; }
+  const orig = ws.onmessage;
+  ws.onmessage = (evt) => {
+    orig && orig(evt);
+    try {
+      const msg = JSON.parse(evt.data);
+      if (msg.type === 'bodies' && msg.bodies.length > 0) {
+        const h = msg.bodies[0].joints['Head'];
+        if (h && h.tracked) {
+          lastHeadX = h.x * cal.xSc + cal.xOff;
+          lastHeadY = -h.y * cal.ySc + cal.yOff;
+        }
+      }
+    } catch(e) {}
+  };
+}
+setTimeout(patchWsForHead, 1000);
+
+// Keyboard shortcuts
+window.addEventListener('keydown', e => {
+  if (e.key === 'h' || e.key === 'H') document.getElementById('btnPanel').click();
+  if (e.key === 'd' || e.key === 'D') document.getElementById('btnDebug').click();
+  if (e.key === 'f' || e.key === 'F') document.documentElement.requestFullscreen?.();
+  if (e.key === '1') document.getElementById('modeSel').value = 'explosion', mode = 'explosion';
+  if (e.key === '2') document.getElementById('modeSel').value = 'gravity',   mode = 'gravity';
+  if (e.key === '3') document.getElementById('modeSel').value = 'ripple',    mode = 'ripple';
+  if (e.key === '4') document.getElementById('modeSel').value = 'attract',   mode = 'attract';
+});
+</script>
+</body>
+</html>
