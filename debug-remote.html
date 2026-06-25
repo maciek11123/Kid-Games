@@ -82,7 +82,7 @@ function connect() {
   if (!host) { setStatus(false,'Enter PC IP first'); return; }
   if (ws) try { ws.close(); } catch(e) {}
   setStatus(false,'Connecting to '+host+'…');
-  ws = new WebSocket('ws://'+host+':8765/');
+  ws = new WebSocket('ws://'+host+':8766/');
   ws.onopen  = () => { connected=true;  setStatus(true,'Connected to '+host); };
   ws.onclose = () => { connected=false; setStatus(false,'Disconnected'); };
   ws.onerror = () => { connected=false; setStatus(false,'Cannot reach '+host+' — check IP'); };
