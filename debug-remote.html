@@ -6,164 +6,131 @@
 <title>Kinect Remote</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-body {
-  background:#0a0a12; color:#fff;
-  font-family:system-ui,sans-serif;
-  min-height:100vh; display:flex; flex-direction:column;
-  padding:20px; gap:14px;
-}
-#statusBar {
-  display:flex; align-items:center; gap:8px;
-  background:#111; border-radius:10px; padding:12px 14px;
-  font-size:12px; color:#888;
-}
+body { background:#0a0a12; color:#fff; font-family:system-ui,sans-serif; min-height:100vh; display:flex; flex-direction:column; padding:20px; gap:14px; }
+
+#statusBar { display:flex; align-items:center; gap:8px; background:#111; border-radius:10px; padding:12px 14px; font-size:12px; color:#888; }
 .dot { width:8px; height:8px; border-radius:50%; background:#f00; flex-shrink:0; }
 .dot.on { background:#0f0; }
 
-/* THE button */
+/* Host input */
+#hostRow { display:flex; gap:8px; }
+#hostInput { flex:1; background:#1a1a2a; border:1px solid #333; color:#fff; padding:10px 12px; border-radius:8px; font-size:13px; font-family:inherit; }
+#btnConn { padding:10px 14px; background:#0af2; border:1px solid #0af; color:#0af; border-radius:8px; cursor:pointer; font-size:12px; white-space:nowrap; }
+
 #btnAutoFit {
-  flex:1; padding:0 20px;
-  font-size:22px; font-weight:900;
+  flex:1; padding:0 20px; font-size:22px; font-weight:900;
   background:linear-gradient(135deg,#003a1a,#001a0a);
   border:3px solid #0f0; border-radius:20px; color:#0f0;
   cursor:pointer; letter-spacing:2px;
-  display:flex; flex-direction:column;
-  align-items:center; justify-content:center; gap:8px;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;
   min-height:200px;
 }
 #btnAutoFit .sub { font-size:12px; font-weight:400; color:#0f06; letter-spacing:0; }
 #btnAutoFit:active { background:#0f0; color:#000; }
-#btnAutoFit:active .sub { color:#0006; }
 
-/* Fine tune (hidden by default, show after fit) */
-#fineTune {
-  background:#111; border-radius:12px; padding:14px;
-  display:none;
-}
-#fineTune .title { font-size:10px; text-transform:uppercase; letter-spacing:1px; color:#444; margin-bottom:10px; }
+#fineTune { background:#111; border-radius:12px; padding:14px; display:none; }
+.sec-title { font-size:10px; text-transform:uppercase; letter-spacing:1px; color:#444; margin-bottom:10px; }
 .row { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
-.row:last-child { margin-bottom:0; }
 .lbl { font-size:11px; color:#888; min-width:55px; }
 .val { font-size:11px; color:#0af; min-width:35px; text-align:right; }
-input[type=range] {
-  flex:1; accent-color:#0af; height:4px;
-  -webkit-appearance:none; background:rgba(255,255,255,.1); border-radius:2px;
-}
-input[type=range]::-webkit-slider-thumb {
-  -webkit-appearance:none; width:24px; height:24px;
-  border-radius:50%; background:#0af;
-}
+input[type=range] { flex:1; accent-color:#0af; height:4px; -webkit-appearance:none; background:rgba(255,255,255,.1); border-radius:2px; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:24px; height:24px; border-radius:50%; background:#0af; }
 
-#btnReset {
-  padding:12px; font-size:12px;
-  background:transparent; border:1px solid #222;
-  border-radius:10px; color:#444; cursor:pointer;
-}
-#btnReset:active { border-color:#f44; color:#f44; }
-#btnTune {
-  padding:10px; font-size:11px;
-  background:transparent; border:1px solid #222;
-  border-radius:8px; color:#444; cursor:pointer;
-}
+#btnReset { padding:12px; font-size:12px; background:transparent; border:1px solid #222; border-radius:10px; color:#444; cursor:pointer; }
+#btnTune  { padding:10px; font-size:11px; background:transparent; border:1px solid #222; border-radius:8px; color:#444; cursor:pointer; }
 </style>
 </head>
 <body>
 
 <div id="statusBar">
   <div class="dot" id="dot"></div>
-  <span id="statusText">Connecting…</span>
+  <span id="statusText">Enter PC IP below</span>
+</div>
+
+<div id="hostRow">
+  <input id="hostInput" type="text" placeholder="192.168.0.20" value="">
+  <button id="btnConn">Connect</button>
 </div>
 
 <button id="btnAutoFit">
   ⊕ AUTO-FIT ME
-  <span class="sub">Stand still · holds 3 seconds · done</span>
+  <span class="sub">Stand still · 3 seconds · done</span>
 </button>
 
 <button id="btnTune">⚙ Fine tune manually</button>
 
 <div id="fineTune">
-  <div class="title">Fine Tune</div>
-  <div class="row">
-    <span class="lbl">Tilt °</span>
-    <input type="range" id="tilt" min="-90" max="90" step="1" value="0">
-    <span class="val" id="tiltVal">0</span>
-  </div>
-  <div class="row">
-    <span class="lbl">X Offset</span>
-    <input type="range" id="xOff" min="-2" max="2" step="0.01" value="0">
-    <span class="val" id="xOffVal">0.00</span>
-  </div>
-  <div class="row">
-    <span class="lbl">Y Offset</span>
-    <input type="range" id="yOff" min="-2" max="2" step="0.01" value="0">
-    <span class="val" id="yOffVal">0.00</span>
-  </div>
-  <div class="row">
-    <span class="lbl">Scale</span>
-    <input type="range" id="sc" min="0.2" max="4" step="0.05" value="1">
-    <span class="val" id="scVal">1.00</span>
-  </div>
+  <div class="sec-title">Fine Tune</div>
+  <div class="row"><span class="lbl">Tilt °</span><input type="range" id="tilt" min="-90" max="90" step="1" value="0"><span class="val" id="tiltVal">0</span></div>
+  <div class="row"><span class="lbl">X Offset</span><input type="range" id="xOff" min="-2" max="2" step="0.01" value="0"><span class="val" id="xOffVal">0.00</span></div>
+  <div class="row"><span class="lbl">Y Offset</span><input type="range" id="yOff" min="-2" max="2" step="0.01" value="0"><span class="val" id="yOffVal">0.00</span></div>
+  <div class="row"><span class="lbl">Scale</span><input type="range" id="sc" min="0.2" max="4" step="0.05" value="1"><span class="val" id="scVal">1.00</span></div>
 </div>
 
 <button id="btnReset">↺ Reset everything</button>
 
-<script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
 <script>
-const WALL_ID = 'kinect-debug-mac';
-let peer, conn, connected = false;
+// Get host from URL param if present
+const params = new URLSearchParams(location.search);
+const paramHost = params.get('host');
+if (paramHost) document.getElementById('hostInput').value = paramHost;
 
-function init() {
-  peer = new Peer();
-  peer.on('open', () => connectToWall());
-  peer.on('error', () => { setStatus(false,'Error — retrying…'); setTimeout(init,4000); });
+let ws, connected = false;
+
+function connect() {
+  const host = document.getElementById('hostInput').value.trim();
+  if (!host) { setStatus(false,'Enter PC IP first'); return; }
+  if (ws) try { ws.close(); } catch(e) {}
+  setStatus(false,'Connecting to '+host+'…');
+  ws = new WebSocket('ws://'+host+':8765/');
+  ws.onopen  = () => { connected=true;  setStatus(true,'Connected to '+host); };
+  ws.onclose = () => { connected=false; setStatus(false,'Disconnected'); };
+  ws.onerror = () => { connected=false; setStatus(false,'Cannot reach '+host+' — check IP'); };
 }
 
-function connectToWall() {
-  setStatus(false,'Connecting…');
-  conn = peer.connect(WALL_ID, { reliable:true });
-  conn.on('open',  () => { connected=true;  setStatus(true,'Connected'); });
-  conn.on('close', () => { connected=false; setStatus(false,'Lost — retrying…'); setTimeout(connectToWall,3000); });
-  conn.on('error', () => { connected=false; setStatus(false,'Error — retrying…');  setTimeout(connectToWall,3000); });
+function send(msg) {
+  if (connected && ws && ws.readyState===1) ws.send(JSON.stringify(msg));
 }
 
-function send(msg) { if(connected&&conn&&conn.open) conn.send(msg); }
-function setStatus(on,txt) {
-  document.getElementById('dot').classList.toggle('on',on);
+function setStatus(on, txt) {
+  document.getElementById('dot').classList.toggle('on', on);
   document.getElementById('statusText').textContent = txt;
 }
+
+document.getElementById('btnConn').onclick = connect;
+if (paramHost) setTimeout(connect, 500);
 
 // Auto-fit
 document.getElementById('btnAutoFit').onclick = () => {
   const btn = document.getElementById('btnAutoFit');
-  send({ type:'autofit' });
+  send({ type:'remote-autofit' });
   btn.innerHTML = '3…<span class="sub">hold still</span>';
   setTimeout(()=>btn.innerHTML='2…<span class="sub">hold still</span>',1000);
   setTimeout(()=>btn.innerHTML='1…<span class="sub">hold still</span>',2000);
-  setTimeout(()=>{ btn.innerHTML='✓ Done!<span class="sub">check screen</span>'; },3000);
-  setTimeout(()=>{ btn.innerHTML='⊕ AUTO-FIT ME<span class="sub">Stand still · holds 3 seconds · done</span>'; },5000);
+  setTimeout(()=>btn.innerHTML='✓ Done!<span class="sub">check screen</span>',3000);
+  setTimeout(()=>btn.innerHTML='⊕ AUTO-FIT ME<span class="sub">Stand still · 3 seconds · done</span>',5000);
 };
 
-// Fine tune toggle
+// Fine tune
 document.getElementById('btnTune').onclick = () => {
   const ft = document.getElementById('fineTune');
   ft.style.display = ft.style.display==='none'?'block':'none';
 };
 
-// Sliders
-function slider(id,vid,dec,key){
+function slider(id,vid,dec){
   document.getElementById(id).oninput=function(){
     document.getElementById(vid).textContent=parseFloat(this.value).toFixed(dec);
     sendCal();
   };
 }
-slider('tilt','tiltVal',0,'tilt');
-slider('xOff','xOffVal',2,'xOff');
-slider('yOff','yOffVal',2,'yOff');
-slider('sc',  'scVal',  2,'sc');
+slider('tilt','tiltVal',0);
+slider('xOff','xOffVal',2);
+slider('yOff','yOffVal',2);
+slider('sc',  'scVal',  2);
 
 function sendCal(){
   const sc=parseFloat(document.getElementById('sc').value);
-  send({type:'cal',cal:{
+  send({type:'remote-cal',cal:{
     tilt: parseFloat(document.getElementById('tilt').value),
     xOff: parseFloat(document.getElementById('xOff').value),
     yOff: parseFloat(document.getElementById('yOff').value),
@@ -171,7 +138,6 @@ function sendCal(){
   }});
 }
 
-// Reset
 document.getElementById('btnReset').onclick=()=>{
   ['xOff','yOff'].forEach(id=>document.getElementById(id).value=0);
   document.getElementById('tilt').value=0;
@@ -179,10 +145,8 @@ document.getElementById('btnReset').onclick=()=>{
   ['xOffVal','yOffVal'].forEach(id=>document.getElementById(id).textContent='0.00');
   document.getElementById('tiltVal').textContent='0';
   document.getElementById('scVal').textContent='1.00';
-  send({type:'reset'});
+  send({type:'remote-reset'});
 };
-
-init();
 </script>
 </body>
 </html>
