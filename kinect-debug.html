@@ -106,13 +106,25 @@ const KEY_JOINTS = ['Head','HandLeft','HandRight','WristLeft','WristRight','Spin
 let lastBodies = [];
 let frameCount = 0, fps = 0, lastFpsTime = Date.now();
 
+// ── Calibration ──
+let cal = { xOff: 0, yOff: 0, xSc: 1.0, ySc: 1.0 };
+let lastHead = { x: 0, y: 0 };
+
+function centreMe() {
+  cal.xOff -= lastHead.x * cal.xSc;
+  cal.yOff += lastHead.y * cal.ySc;
+  log('Centred — xOff=' + cal.xOff.toFixed(3) + ' yOff=' + cal.yOff.toFixed(3));
+}
+
 // ── Map Kinect camera space → canvas pixels ──
-// Kinect X: roughly -1.1..1.1 m, Y: roughly -0.6..1.2 m, origin at sensor
 function kToC(x, y) {
   const W = canvas.width, H = canvas.height;
-  const px = (x / 1.2 + 1) * 0.5 * W;   // -1.2..1.2 → 0..W
-  const py = (-y / 1.2 + 0.5) * H;       // flip Y, centre vertically
-  return { px, py };
+  const nx = ((x + cal.xOff) * cal.xSc) / 1.2;
+  const ny = ((-y + cal.yOff) * cal.ySc) / 1.2;
+  return {
+    px: (nx + 1) * 0.5 * W,
+    py: (ny + 0.5) * H
+  };
 }
 
 // ── Draw ──
@@ -293,6 +305,12 @@ function connect() {
     document.getElementById('body-count').textContent = `${lastBodies.length} bod${lastBodies.length === 1 ? 'y' : 'ies'}`;
     document.getElementById('frame-count').textContent = `${fps * Math.floor((now - lastFpsTime)/1000 + 1)} frames`;
 
+    // Track head for Centre Me
+    if (lastBodies.length) {
+      const h = lastBodies[0].joints['Head'];
+      if (h && h.tracked) lastHead = { x: h.x, y: h.y };
+    }
+
     updatePanel(lastBodies);
 
     // Log key events
@@ -308,6 +326,37 @@ function connect() {
 
 document.getElementById('connect-btn').onclick = () => connect();
 connect();
+
+// ── PeerJS — receive commands from phone remote ──
+const DEBUG_PEER_ID = 'kinect-debug-mac';
+
+function initPeer() {
+  const s = document.createElement('script');
+  s.src = 'https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js';
+  s.onload = () => {
+    const peer = new Peer(DEBUG_PEER_ID);
+    peer.on('open', () => log('[PEER] Remote ready — id: ' + DEBUG_PEER_ID));
+    peer.on('connection', conn => {
+      log('[PEER] Phone connected');
+      conn.on('data', msg => {
+        switch(msg.type) {
+          case 'centre': centreMe(); break;
+          case 'cal':
+            Object.assign(cal, msg.cal);
+            log('Cal updated: xOff=' + cal.xOff.toFixed(2) + ' xSc=' + cal.xSc.toFixed(2));
+            break;
+          case 'reset':
+            cal = { xOff: 0, yOff: 0, xSc: 1.0, ySc: 1.0 };
+            log('Cal reset');
+            break;
+        }
+      });
+    });
+    peer.on('error', () => setTimeout(initPeer, 5000));
+  };
+  document.head.appendChild(s);
+}
+initPeer();
 
 // ── Render loop ──
 function loop() {
