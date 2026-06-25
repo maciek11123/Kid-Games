@@ -280,12 +280,12 @@ function connect() {
   const host = document.getElementById('wsHost').value.trim() || 'localhost';
   if (ws) try { ws.close(); } catch(e) {}
 
-  ws = new WebSocket(`ws://${host}:8765/`);
+  ws = new WebSocket(`ws://${host}:8766/`);
 
   ws.onopen = () => {
     wsConnected = true;
     document.getElementById('kinectDot').classList.add('on');
-    document.getElementById('kinectStatus').textContent = `Kinect: ${host}:8765`;
+    document.getElementById('kinectStatus').textContent = `Kinect: ${host}:8766`;
   };
 
   ws.onclose = () => {
