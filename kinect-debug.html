@@ -60,6 +60,25 @@ canvas { position:fixed; inset:0; z-index:1; }
 #btn-qr { padding:5px 10px; background:#1a1; border:1px solid #0f0; color:#0f0; border-radius:4px; cursor:pointer; font-size:11px; }
 #btn-mirror { padding:5px 10px; background:#1a1a00; border:1px solid #880; color:#aa0; border-radius:4px; cursor:pointer; font-size:11px; }
 #btn-mirror.active { background:#332200; border-color:#fa0; color:#fa0; }
+#btn-autofit { padding:5px 12px; background:#003a1a; border:1px solid #0f0; color:#0f0; border-radius:4px; cursor:pointer; font-size:11px; font-weight:bold; }
+#btn-autofit:active { background:#0f0; color:#000; }
+#btn-tune { padding:5px 10px; background:#0a0a1a; border:1px solid #44a; color:#88f; border-radius:4px; cursor:pointer; font-size:11px; }
+#btn-tune.active { background:#1a1a3a; border-color:#66f; color:#aaf; }
+#btn-reset { padding:5px 10px; background:#1a0000; border:1px solid #844; color:#f66; border-radius:4px; cursor:pointer; font-size:11px; }
+
+/* Fine-tune panel */
+#tunePanel {
+  position:fixed; bottom:54px; left:12px; z-index:11;
+  background:rgba(0,0,0,0.88); border:1px solid #234;
+  border-radius:8px; padding:12px 14px; width:240px;
+  display:none;
+}
+.tune-title { font-size:10px; text-transform:uppercase; letter-spacing:1px; color:#456; margin-bottom:10px; font-family:system-ui; }
+.tune-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+.tlbl { font-size:10px; color:#789; min-width:42px; }
+.tval { font-size:10px; color:#0af; min-width:38px; text-align:right; }
+#tunePanel input[type=range] { flex:1; accent-color:#0af; height:4px; -webkit-appearance:none; background:rgba(255,255,255,.12); border-radius:2px; }
+#tunePanel input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#0af; cursor:pointer; }
 
 #log { position:fixed; bottom:12px; right:12px; z-index:10; font-size:9px; color:#333; line-height:1.5; width:280px; text-align:right; }
 </style>
@@ -100,8 +119,20 @@ canvas { position:fixed; inset:0; z-index:1; }
 <div id="hostRow">
   <input id="host-input" type="text" value="localhost" placeholder="Kinect bridge host">
   <button id="connect-btn">Connect</button>
+  <button id="btn-autofit">⊕ Auto-Fit</button>
+  <button id="btn-tune">⚙ Tune</button>
+  <button id="btn-reset">↺ Reset</button>
   <button id="btn-mirror">⬜ Front</button>
   <button id="btn-qr">📱 QR</button>
+</div>
+
+<!-- Manual fine-tune panel -->
+<div id="tunePanel">
+  <div class="tune-title">Fine Tune</div>
+  <div class="tune-row"><span class="tlbl">Tilt °</span><input type="range" id="t-tilt" min="-90" max="90" step="1" value="0"><span class="tval" id="v-tilt">0</span></div>
+  <div class="tune-row"><span class="tlbl">X Off</span><input type="range" id="t-xoff" min="-2" max="2" step="0.01" value="0"><span class="tval" id="v-xoff">0.00</span></div>
+  <div class="tune-row"><span class="tlbl">Y Off</span><input type="range" id="t-yoff" min="-2" max="2" step="0.01" value="0"><span class="tval" id="v-yoff">0.00</span></div>
+  <div class="tune-row"><span class="tlbl">Scale</span><input type="range" id="t-scale" min="0.2" max="4" step="0.05" value="1"><span class="tval" id="v-scale">1.00</span></div>
 </div>
 
 <div id="log"></div>
@@ -237,6 +268,7 @@ function autoFit(body){
   cal.xSc=sc; cal.ySc=sc;
 
   updateCalDisplay();
+  if(typeof syncSliders==='function') syncSliders();
   // Send cal result back to the remote via the bridge
   broadcastCal();
   document.getElementById('fitResult').textContent='✓ Done! tilt='+cal.tilt.toFixed(1)+'° sc='+sc.toFixed(2);
@@ -274,6 +306,60 @@ document.getElementById('btn-mirror').onclick = () => {
   mirrorX = !mirrorX;
   updateMirrorBtn();
   broadcastCal();
+};
+
+// ── On-screen Auto-Fit button ──
+document.getElementById('btn-autofit').onclick = () => {
+  startAutoFit();
+};
+
+// ── Sync sliders FROM cal object ──
+function syncSliders(){
+  document.getElementById('t-tilt').value  = cal.tilt;
+  document.getElementById('t-xoff').value  = cal.xOff;
+  document.getElementById('t-yoff').value  = cal.yOff;
+  document.getElementById('t-scale').value = cal.xSc;
+  document.getElementById('v-tilt').textContent  = cal.tilt.toFixed(0);
+  document.getElementById('v-xoff').textContent  = cal.xOff.toFixed(2);
+  document.getElementById('v-yoff').textContent  = cal.yOff.toFixed(2);
+  document.getElementById('v-scale').textContent = cal.xSc.toFixed(2);
+}
+
+// ── Fine-tune panel toggle ──
+document.getElementById('btn-tune').onclick = () => {
+  const p = document.getElementById('tunePanel');
+  const btn = document.getElementById('btn-tune');
+  const showing = p.style.display === 'block';
+  p.style.display = showing ? 'none' : 'block';
+  btn.classList.toggle('active', !showing);
+  if(!showing) syncSliders();
+};
+
+// ── Slider handlers ──
+function wireSlider(id, valId, key, dec){
+  document.getElementById(id).oninput = function(){
+    const v = parseFloat(this.value);
+    document.getElementById(valId).textContent = v.toFixed(dec);
+    if(key === 'scale'){ cal.xSc = v; cal.ySc = v; }
+    else cal[key] = v;
+    updateCalDisplay();
+    broadcastCal();
+  };
+}
+wireSlider('t-tilt',  'v-tilt',  'tilt',  0);
+wireSlider('t-xoff',  'v-xoff',  'xOff',  2);
+wireSlider('t-yoff',  'v-yoff',  'yOff',  2);
+wireSlider('t-scale', 'v-scale', 'scale', 2);
+
+// ── Reset button ──
+document.getElementById('btn-reset').onclick = () => {
+  cal = { xOff:0, yOff:0, xSc:1, ySc:1, tilt:0 };
+  mirrorX = false;
+  updateMirrorBtn();
+  updateCalDisplay();
+  syncSliders();
+  broadcastCal();
+  log('Reset calibration');
 };
 
 // ── Draw loop ──
