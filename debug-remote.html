@@ -12,7 +12,6 @@ body { background:#0a0a12; color:#fff; font-family:system-ui,sans-serif; min-hei
 .dot { width:8px; height:8px; border-radius:50%; background:#f00; flex-shrink:0; }
 .dot.on { background:#0f0; }
 
-/* Host input */
 #hostRow { display:flex; gap:8px; }
 #hostInput { flex:1; background:#1a1a2a; border:1px solid #333; color:#fff; padding:10px 12px; border-radius:8px; font-size:13px; font-family:inherit; }
 #btnConn { padding:10px 14px; background:#0af2; border:1px solid #0af; color:#0af; border-radius:8px; cursor:pointer; font-size:12px; white-space:nowrap; }
@@ -27,6 +26,11 @@ body { background:#0a0a12; color:#fff; font-family:system-ui,sans-serif; min-hei
 }
 #btnAutoFit .sub { font-size:12px; font-weight:400; color:#0f06; letter-spacing:0; }
 #btnAutoFit:active { background:#0f0; color:#000; }
+
+#fitStatus {
+  background:#111; border-radius:8px; padding:10px 14px;
+  font-size:11px; color:#0f0; display:none; text-align:center;
+}
 
 #fineTune { background:#111; border-radius:12px; padding:14px; display:none; }
 .sec-title { font-size:10px; text-transform:uppercase; letter-spacing:1px; color:#444; margin-bottom:10px; }
@@ -57,6 +61,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:24px; h
   <span class="sub">Stand still · 3 seconds · done</span>
 </button>
 
+<div id="fitStatus"></div>
+
 <button id="btnTune">⚙ Fine tune manually</button>
 
 <div id="fineTune">
@@ -70,22 +76,58 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:24px; h
 <button id="btnReset">↺ Reset everything</button>
 
 <script>
-// Get host from URL param if present
 const params = new URLSearchParams(location.search);
 const paramHost = params.get('host');
 if (paramHost) document.getElementById('hostInput').value = paramHost;
 
-let ws, connected = false;
+let ws, connected = false, reconnectTimer;
 
 function connect() {
   const host = document.getElementById('hostInput').value.trim();
   if (!host) { setStatus(false,'Enter PC IP first'); return; }
+  clearTimeout(reconnectTimer);
   if (ws) try { ws.close(); } catch(e) {}
   setStatus(false,'Connecting to '+host+'…');
+
   ws = new WebSocket('ws://'+host+':8766/');
+
   ws.onopen  = () => { connected=true;  setStatus(true,'Connected to '+host); };
-  ws.onclose = () => { connected=false; setStatus(false,'Disconnected'); };
-  ws.onerror = () => { connected=false; setStatus(false,'Cannot reach '+host+' — check IP'); };
+
+  ws.onclose = () => {
+    connected=false;
+    setStatus(false,'Disconnected — retrying…');
+    reconnectTimer = setTimeout(connect, 3000);
+  };
+
+  ws.onerror = () => {
+    setStatus(false,'Cannot reach '+host+' — check IP');
+  };
+
+  // Receive cal-result back from debug page after auto-fit
+  ws.onmessage = (evt) => {
+    let msg; try { msg = JSON.parse(evt.data); } catch(e) { return; }
+
+    if (msg.type === 'cal-result' && msg.cal) {
+      const c = msg.cal;
+      // Update sliders to match auto-fit result
+      setSlider('tilt',  c.tilt  || 0,    'tiltVal',  0);
+      setSlider('xOff',  c.xOff  || 0,    'xOffVal',  2);
+      setSlider('yOff',  c.yOff  || 0,    'yOffVal',  2);
+      setSlider('sc',    c.xSc   || 1,    'scVal',    2);
+
+      // Show fine tune panel so they can see the result
+      document.getElementById('fineTune').style.display = 'block';
+      const fs = document.getElementById('fitStatus');
+      fs.style.display = 'block';
+      fs.textContent = '✓ Auto-fit applied — tilt ' + (c.tilt||0).toFixed(1) + '°  scale ' + (c.xSc||1).toFixed(2);
+      setTimeout(() => fs.style.display = 'none', 4000);
+    }
+  };
+}
+
+function setSlider(id, val, valId, dec) {
+  document.getElementById(id).value = val;
+  document.getElementById(valId).textContent = parseFloat(val).toFixed(dec);
 }
 
 function send(msg) {
@@ -98,7 +140,7 @@ function setStatus(on, txt) {
 }
 
 document.getElementById('btnConn').onclick = connect;
-if (paramHost) setTimeout(connect, 500);
+if (paramHost) setTimeout(connect, 400);
 
 // Auto-fit
 document.getElementById('btnAutoFit').onclick = () => {
@@ -107,8 +149,8 @@ document.getElementById('btnAutoFit').onclick = () => {
   btn.innerHTML = '3…<span class="sub">hold still</span>';
   setTimeout(()=>btn.innerHTML='2…<span class="sub">hold still</span>',1000);
   setTimeout(()=>btn.innerHTML='1…<span class="sub">hold still</span>',2000);
-  setTimeout(()=>btn.innerHTML='✓ Done!<span class="sub">check screen</span>',3000);
-  setTimeout(()=>btn.innerHTML='⊕ AUTO-FIT ME<span class="sub">Stand still · 3 seconds · done</span>',5000);
+  setTimeout(()=>btn.innerHTML='✓ checking…<span class="sub">updating sliders</span>',3000);
+  setTimeout(()=>btn.innerHTML='⊕ AUTO-FIT ME<span class="sub">Stand still · 3 seconds · done</span>',5500);
 };
 
 // Fine tune
@@ -117,9 +159,9 @@ document.getElementById('btnTune').onclick = () => {
   ft.style.display = ft.style.display==='none'?'block':'none';
 };
 
-function slider(id,vid,dec){
-  document.getElementById(id).oninput=function(){
-    document.getElementById(vid).textContent=parseFloat(this.value).toFixed(dec);
+function slider(id, vid, dec){
+  document.getElementById(id).oninput = function(){
+    document.getElementById(vid).textContent = parseFloat(this.value).toFixed(dec);
     sendCal();
   };
 }
@@ -129,8 +171,8 @@ slider('yOff','yOffVal',2);
 slider('sc',  'scVal',  2);
 
 function sendCal(){
-  const sc=parseFloat(document.getElementById('sc').value);
-  send({type:'remote-cal',cal:{
+  const sc = parseFloat(document.getElementById('sc').value);
+  send({ type:'remote-cal', cal:{
     tilt: parseFloat(document.getElementById('tilt').value),
     xOff: parseFloat(document.getElementById('xOff').value),
     yOff: parseFloat(document.getElementById('yOff').value),
@@ -138,14 +180,13 @@ function sendCal(){
   }});
 }
 
-document.getElementById('btnReset').onclick=()=>{
-  ['xOff','yOff'].forEach(id=>document.getElementById(id).value=0);
-  document.getElementById('tilt').value=0;
-  document.getElementById('sc').value=1;
-  ['xOffVal','yOffVal'].forEach(id=>document.getElementById(id).textContent='0.00');
-  document.getElementById('tiltVal').textContent='0';
-  document.getElementById('scVal').textContent='1.00';
-  send({type:'remote-reset'});
+document.getElementById('btnReset').onclick = () => {
+  setSlider('xOff', 0, 'xOffVal', 2);
+  setSlider('yOff', 0, 'yOffVal', 2);
+  setSlider('tilt', 0, 'tiltVal', 0);
+  setSlider('sc',   1, 'scVal',   2);
+  document.getElementById('fitStatus').style.display = 'none';
+  send({ type:'remote-reset' });
 };
 </script>
 </body>
