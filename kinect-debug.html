@@ -107,6 +107,16 @@ canvas { position:fixed; inset:0; z-index:1; }
 <div id="log"></div>
 
 <script>
+// ── Log (declared first so connect() can use it on load) ──
+const logLines=[];
+function log(msg){
+  const t=new Date().toLocaleTimeString('en',{hour12:false});
+  logLines.push('['+t+'] '+msg);
+  if(logLines.length>5)logLines.shift();
+  const el=document.getElementById('log');
+  if(el) el.textContent=logLines.join('\n');
+}
+
 const canvas = document.getElementById('c');
 const ctx    = canvas.getContext('2d');
 let W, H;
@@ -375,14 +385,6 @@ document.getElementById('btnDismiss').onclick=()=>{
   document.getElementById('qrOverlay').style.display='none';
 };
 
-// ── Log ──
-const logLines=[];
-function log(msg){
-  const t=new Date().toLocaleTimeString('en',{hour12:false});
-  logLines.push('['+t+'] '+msg);
-  if(logLines.length>5)logLines.shift();
-  document.getElementById('log').textContent=logLines.join('\n');
-}
 </script>
 </body>
 </html>
