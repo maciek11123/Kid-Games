@@ -58,6 +58,8 @@ canvas { position:fixed; inset:0; z-index:1; }
 #host-input { background:#111; border:1px solid #333; color:#fff; padding:5px 8px; border-radius:4px; font-size:11px; width:130px; font-family:inherit; }
 #connect-btn { padding:5px 10px; background:#0af1; border:1px solid #0af; color:#0af; border-radius:4px; cursor:pointer; font-size:11px; }
 #btn-qr { padding:5px 10px; background:#1a1; border:1px solid #0f0; color:#0f0; border-radius:4px; cursor:pointer; font-size:11px; }
+#btn-mirror { padding:5px 10px; background:#1a1a00; border:1px solid #880; color:#aa0; border-radius:4px; cursor:pointer; font-size:11px; }
+#btn-mirror.active { background:#332200; border-color:#fa0; color:#fa0; }
 
 #log { position:fixed; bottom:12px; right:12px; z-index:10; font-size:9px; color:#333; line-height:1.5; width:280px; text-align:right; }
 </style>
@@ -98,6 +100,7 @@ canvas { position:fixed; inset:0; z-index:1; }
 <div id="hostRow">
   <input id="host-input" type="text" value="localhost" placeholder="Kinect bridge host">
   <button id="connect-btn">Connect</button>
+  <button id="btn-mirror">⬜ Front</button>
   <button id="btn-qr">📱 QR</button>
 </div>
 
@@ -112,12 +115,14 @@ resize(); window.addEventListener('resize', resize);
 
 // ── Cal ──
 let cal = { xOff:0, yOff:0, xSc:1, ySc:1, tilt:0 };
+let mirrorX = false;
 
 function applyKToC(x, y) {
   const rad = cal.tilt * Math.PI / 180;
   const cos = Math.cos(rad), sin = Math.sin(rad);
-  const rx  = x*cos - y*sin;
+  let rx    = x*cos - y*sin;
   const ry  = x*sin + y*cos;
+  if (mirrorX) rx = -rx;
   const nx  = ((rx + cal.xOff) * cal.xSc) / 1.2;
   const ny  = ((-ry + cal.yOff) * cal.ySc) / 1.2;
   return { px:(nx+1)*0.5*W, py:(ny+0.5)*H };
@@ -239,10 +244,27 @@ function updateCalDisplay(){
 // Send cal back through the single ws connection so bridge broadcasts to all clients
 function broadcastCal(){
   if(ws && ws.readyState===1){
-    ws.send(JSON.stringify({ type:'cal-result', cal: cal }));
+    ws.send(JSON.stringify({ type:'cal-result', cal: cal, mirrorX: mirrorX }));
     log('Cal sent to remote');
   }
 }
+
+// ── Mirror toggle ──
+function updateMirrorBtn(){
+  const btn = document.getElementById('btn-mirror');
+  if(mirrorX){
+    btn.textContent = '🔄 Back';
+    btn.classList.add('active');
+  } else {
+    btn.textContent = '⬜ Front';
+    btn.classList.remove('active');
+  }
+}
+document.getElementById('btn-mirror').onclick = () => {
+  mirrorX = !mirrorX;
+  updateMirrorBtn();
+  broadcastCal();
+};
 
 // ── Draw loop ──
 function draw(){
@@ -298,6 +320,7 @@ function connect(){
     if(msg.type==='remote-autofit'){ startAutoFit(); return; }
     if(msg.type==='remote-cal'){ Object.assign(cal, msg.cal); updateCalDisplay(); return; }
     if(msg.type==='remote-reset'){ cal={xOff:0,yOff:0,xSc:1,ySc:1,tilt:0}; updateCalDisplay(); return; }
+    if(msg.type==='remote-mirror'){ mirrorX = !!msg.mirrorX; updateMirrorBtn(); return; }
 
     // Skeleton data from Kinect
     if(msg.type!=='bodies') return;
