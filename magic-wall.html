@@ -16,7 +16,7 @@
 :root{
   --cyan:#00e5ff; --cyan-dim:rgba(0,229,255,.25);
   --grass:#50fa7b; --coral:#FF6B6B; --sun:#FDE74C; --violet:#be78ff;
-  --ink:#050508; --glass:rgba(8,10,20,.82); --line:rgba(255,255,255,.09);
+  --ink:#000000; --glass:rgba(8,10,20,.82); --line:rgba(255,255,255,.09);
 }
 html,body{height:100%}
 body{background:var(--ink);overflow:hidden;font-family:'JetBrains Mono',monospace;user-select:none;touch-action:none;overscroll-behavior:none;color:#fff}
@@ -137,7 +137,6 @@ video#cam{display:none!important}
 <div id="ui">
   <div class="panel" id="dock-games" style="display:none">
     <button class="btn mode-btn btn-game" id="btn-bubbles">🫧 Bubbles</button>
-    <button class="btn mode-btn btn-game" id="btn-fruits">🍉 Fruits</button>
     <button class="btn mode-btn btn-game" id="btn-particles">✦ Particles</button>
   </div>
 </div>
@@ -411,40 +410,156 @@ function animate(){
 }
 
 // ═══════════════════════════════════
-//  BUILT-IN GAMES (Bubbles & Fruits)
+//  BUILT-IN GAMES (Bubbles)
 // ═══════════════════════════════════
-const BCOLS=['#ff6b9d','#00e5ff','#50fa7b','#be78ff','#FDE74C','#ff9f43'];
-const FTYPES=[
-  {e:'🍉',c:'220,50,47'},{e:'🍊',c:'255,140,0'},{e:'🍋',c:'255,220,0'},
-  {e:'🍇',c:'160,80,200'},{e:'🍓',c:'220,30,60'},{e:'🍑',c:'255,160,80'},
-  {e:'🥝',c:'80,180,50'},{e:'🍒',c:'200,20,40'}
-];
-let entities=[],particles2D=[],gameScore=0;
 
-function spawnEnt(){
-  if(currentMode==='bubbles'){
-    entities.push({x:Math.random()*W,y:H+50,r:35+Math.random()*45,sy:1.5+Math.random()*2,sx:(Math.random()-.5)*.8,w:Math.random()*6.28,color:BCOLS[Math.floor(Math.random()*BCOLS.length)]});
-  }else{
-    let t=FTYPES[Math.floor(Math.random()*FTYPES.length)];
-    entities.push({x:Math.random()*W,y:H+50,r:60+Math.random()*30,sy:3+Math.random()*3,seed:Math.random()*100,emoji:t.e,color:t.c});
-  }
+// Web Audio for pop sound
+let audioCtx=null;
+function ensureAudio(){
+  if(!audioCtx) audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended') audioCtx.resume();
+}
+function playPop(r){
+  ensureAudio();
+  const t=audioCtx.currentTime;
+  // Noise burst
+  const bufLen=audioCtx.sampleRate*0.08;
+  const buf=audioCtx.createBuffer(1,bufLen,audioCtx.sampleRate);
+  const d=buf.getChannelData(0);
+  for(let i=0;i<bufLen;i++) d[i]=(Math.random()*2-1);
+  const src=audioCtx.createBufferSource();
+  src.buffer=buf;
+  // Band-pass — bigger bubble = lower freq
+  const bpf=audioCtx.createBiquadFilter();
+  bpf.type='bandpass';
+  bpf.frequency.value=Math.max(300,1800-r*10);
+  bpf.Q.value=2.5;
+  // Tone ping
+  const osc=audioCtx.createOscillator();
+  osc.type='sine';
+  osc.frequency.setValueAtTime(Math.max(200,900-r*6),t);
+  osc.frequency.exponentialRampToValueAtTime(80,t+0.12);
+  const oscGain=audioCtx.createGain();
+  oscGain.gain.setValueAtTime(0.18,t);
+  oscGain.gain.exponentialRampToValueAtTime(0.001,t+0.15);
+  // Noise gain
+  const nGain=audioCtx.createGain();
+  nGain.gain.setValueAtTime(0.25,t);
+  nGain.gain.exponentialRampToValueAtTime(0.001,t+0.07);
+  // Connect
+  src.connect(bpf); bpf.connect(nGain); nGain.connect(audioCtx.destination);
+  osc.connect(oscGain); oscGain.connect(audioCtx.destination);
+  src.start(t); src.stop(t+0.1);
+  osc.start(t); osc.stop(t+0.18);
 }
 
-function splash(x,y,c,isFruit){
-  for(let i=0;i<15;i++){
-    particles2D.push({x,y,vx:(Math.random()-.5)*15,vy:(Math.random()-.5)*15,r:Math.random()*(isFruit?6:4)+2,color:isFruit?`rgba(${c},`:c,alpha:1,isFruit});
+// Bubble hue palette (H values in HSL)
+const BHUES=[340,195,140,270,48,25]; // pink, cyan, green, purple, yellow, orange
+let entities=[],particles2D=[],gameScore=0;
+
+function spawnBubble(){
+  const hue=BHUES[Math.floor(Math.random()*BHUES.length)];
+  entities.push({
+    x:Math.random()*W, y:H+60,
+    r:30+Math.random()*50,
+    sy:1.2+Math.random()*1.8,
+    sx:(Math.random()-.5)*0.6,
+    w:Math.random()*6.28,
+    hue,
+    wobble:0.08+Math.random()*0.06,
+    phase:Math.random()*6.28
+  });
+}
+
+function drawBubble(ctx,x,y,r,hue,t){
+  ctx.save();
+  ctx.translate(x,y);
+
+  // Slight squish wobble
+  const wobX=1+Math.sin(t*2.1)*0.025;
+  const wobY=1+Math.cos(t*1.7)*0.025;
+  ctx.scale(wobX,wobY);
+
+  // === Body fill — very subtle tinted interior ===
+  const bodyGrad=ctx.createRadialGradient(-r*0.15,-r*0.15,r*0.05,0,0,r);
+  bodyGrad.addColorStop(0,`hsla(${hue},80%,95%,0.06)`);
+  bodyGrad.addColorStop(0.7,`hsla(${hue},70%,60%,0.04)`);
+  bodyGrad.addColorStop(1,`hsla(${hue},90%,50%,0.0)`);
+  ctx.beginPath(); ctx.arc(0,0,r,0,6.28);
+  ctx.fillStyle=bodyGrad; ctx.fill();
+
+  // === Rim — thin iridescent ring ===
+  const rimGrad=ctx.createRadialGradient(0,0,r*0.88,0,0,r);
+  rimGrad.addColorStop(0,`hsla(${hue},80%,70%,0.0)`);
+  rimGrad.addColorStop(0.5,`hsla(${(hue+60)%360},90%,80%,0.55)`);
+  rimGrad.addColorStop(1,`hsla(${(hue+120)%360},95%,90%,0.7)`);
+  ctx.beginPath(); ctx.arc(0,0,r,0,6.28);
+  ctx.fillStyle=rimGrad; ctx.fill();
+
+  // === Thin stroke rim ===
+  ctx.beginPath(); ctx.arc(0,0,r,0,6.28);
+  ctx.strokeStyle=`hsla(${hue},70%,80%,0.45)`;
+  ctx.lineWidth=1.5; ctx.stroke();
+
+  // === Main specular highlight — top-left ===
+  const hiR=r*0.38;
+  const hiGrad=ctx.createRadialGradient(-r*0.28,-r*0.38,0,-r*0.28,-r*0.38,hiR);
+  hiGrad.addColorStop(0,'rgba(255,255,255,0.72)');
+  hiGrad.addColorStop(0.4,'rgba(255,255,255,0.28)');
+  hiGrad.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.beginPath(); ctx.arc(-r*0.28,-r*0.38,hiR,0,6.28);
+  ctx.fillStyle=hiGrad; ctx.fill();
+
+  // === Small secondary specular — bottom-right ===
+  const hi2R=r*0.13;
+  const hi2Grad=ctx.createRadialGradient(r*0.38,r*0.4,0,r*0.38,r*0.4,hi2R);
+  hi2Grad.addColorStop(0,'rgba(255,255,255,0.35)');
+  hi2Grad.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.beginPath(); ctx.arc(r*0.38,r*0.4,hi2R,0,6.28);
+  ctx.fillStyle=hi2Grad; ctx.fill();
+
+  // === Inner shadow at bottom — gives depth ===
+  const shadowGrad=ctx.createRadialGradient(0,r*0.3,r*0.3,0,0,r);
+  shadowGrad.addColorStop(0,`hsla(${hue},60%,20%,0.22)`);
+  shadowGrad.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.beginPath(); ctx.arc(0,0,r,0,6.28);
+  ctx.fillStyle=shadowGrad; ctx.fill();
+
+  ctx.restore();
+}
+
+function splash(x,y,hue){
+  // Scatter small droplets outward
+  const count=18+Math.floor(Math.random()*8);
+  for(let i=0;i<count;i++){
+    const angle=Math.random()*6.28;
+    const speed=3+Math.random()*12;
+    particles2D.push({
+      x,y,
+      vx:Math.cos(angle)*speed,
+      vy:Math.sin(angle)*speed-3,
+      r:1.5+Math.random()*3.5,
+      hue:(hue+Math.random()*30-15+360)%360,
+      alpha:0.85+Math.random()*0.15
+    });
   }
 }
 
 function drawGameFrame(){
   gCtx.clearRect(0,0,W,H);
-  if(Math.random()<(currentMode==='bubbles'?.03:.02)) spawnEnt();
+  // Pure black background
+  gCtx.fillStyle='#000';
+  gCtx.fillRect(0,0,W,H);
 
-  // Move + draw entities
+  if(Math.random()<0.032) spawnBubble();
+  const now=performance.now()*0.001;
+
+  // Bubbles
   for(let i=entities.length-1;i>=0;i--){
     const e=entities[i];
-    if(currentMode==='bubbles'){e.w+=.05;e.x+=Math.sin(e.w)*.5+e.sx;e.y-=e.sy}
-    else{e.x+=Math.sin(e.seed+e.y*.01)*0.8;e.y-=e.sy}
+    e.w+=0.04; e.phase+=0.02;
+    e.x+=Math.sin(e.w)*e.wobble*e.r*0.18+e.sx;
+    e.y-=e.sy;
     if(e.y<-100){entities.splice(i,1);continue}
 
     // Hit test against blobs
@@ -452,39 +567,35 @@ function drawGameFrame(){
     for(const b of blobs){
       let bx=b.cx*W,by=b.cy*H;
       if(perspMatrix){const pp=applyPersp(b.cx,b.cy);bx=pp.x*W;by=pp.y*H}
-      if(Math.hypot(bx-e.x,by-e.y)<e.r+28){hit=true;break}
+      if(Math.hypot(bx-e.x,by-e.y)<e.r+24){hit=true;break}
     }
     if(hit){
-      splash(e.x,e.y,e.color,currentMode==='fruits');
-      gameScore+=currentMode==='fruits'?15:1;
+      splash(e.x,e.y,e.hue);
+      playPop(e.r);
+      gameScore++;
       scoreEl.innerText=gameScore;
       entities.splice(i,1);
       continue;
     }
 
-    gCtx.save();gCtx.translate(e.x,e.y);
-    if(currentMode==='bubbles'){
-      gCtx.beginPath();gCtx.arc(0,0,e.r,0,6.28);
-      gCtx.fillStyle=e.color+'40';gCtx.fill();
-      gCtx.strokeStyle=e.color;gCtx.lineWidth=2.5;gCtx.stroke();
-      // shine
-      gCtx.beginPath();gCtx.arc(-e.r*.3,-e.r*.3,e.r*.22,0,6.28);
-      gCtx.fillStyle='rgba(255,255,255,.35)';gCtx.fill();
-    }else{
-      gCtx.font=`${e.r*1.5}px serif`;gCtx.textAlign='center';gCtx.textBaseline='middle';
-      gCtx.fillText(e.emoji,0,0);
-    }
-    gCtx.restore();
+    drawBubble(gCtx,e.x,e.y,e.r,e.hue,now+e.phase);
   }
 
-  // Particles
+  // Droplet particles
   for(let i=particles2D.length-1;i>=0;i--){
     const p=particles2D[i];
-    p.x+=p.vx;p.y+=p.vy;p.vy+=0.4;p.alpha-=0.04;p.r*=0.97;
+    p.x+=p.vx; p.y+=p.vy; p.vy+=0.45;
+    p.vx*=0.97;
+    p.alpha-=0.035; p.r*=0.97;
     if(p.alpha<=0){particles2D.splice(i,1);continue}
-    gCtx.beginPath();gCtx.arc(p.x,p.y,p.r,0,6.28);
-    gCtx.fillStyle=p.isFruit?`${p.color}${p.alpha})`:p.color;
-    gCtx.globalAlpha=p.alpha;gCtx.fill();gCtx.globalAlpha=1;
+    gCtx.save();
+    gCtx.globalAlpha=p.alpha;
+    // Teardrop-ish — scale y slightly
+    gCtx.beginPath();
+    gCtx.ellipse(p.x,p.y,p.r*0.75,p.r,0,0,6.28);
+    gCtx.fillStyle=`hsl(${p.hue},80%,75%)`;
+    gCtx.fill();
+    gCtx.restore();
   }
 }
 
@@ -961,9 +1072,8 @@ function sendToGame(data){
 // ═══════════════════════════════════
 // Unified game grid
 const BUILTIN_GAMES=[
-  {id:'bubbles', emoji:'🫧', label:'Bubbles', cat:'game'},
-  {id:'fruits',  emoji:'🍉', label:'Fruits',  cat:'game'},
-  {id:'particles',emoji:'✦', label:'Particles',cat:'game'},
+  {id:'bubbles',   emoji:'🫧', label:'Bubbles',   cat:'game'},
+  {id:'particles', emoji:'✦', label:'Particles', cat:'game'},
 ];
 function buildAllCards(iframeGames){
   const grid=$('home-cards');
@@ -986,7 +1096,7 @@ function buildAllCards(iframeGames){
     grid.appendChild(card);
   });
 }
-['bubbles','fruits','particles'].forEach(m=>{ const b=$('btn-'+m); if(b) b.onclick=()=>setMode(m,'game'); });
+['bubbles','particles'].forEach(m=>{ const b=$('btn-'+m); if(b) b.onclick=()=>setMode(m,'game'); });
 
 $('btn-home').onclick=goHome;
 $('btn-fs').onclick=()=>document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen().catch(()=>{});
@@ -1004,7 +1114,7 @@ $('btn-remote-home').onclick=async()=>{
 // ═══════════════════════════════════
 //  BOOT
 // ═══════════════════════════════════
-discoverGames();
+buildAllCards([]); // No external games — Bubbles and Particles only
 connectKinect();
 isProcessing=true; processLoop();  // start render loop (no camera needed)
 const _khi=$('kinect-host-input');
