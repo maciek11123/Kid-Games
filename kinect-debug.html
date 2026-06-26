@@ -76,8 +76,8 @@ canvas { position:fixed; inset:0; z-index:1; }
   <div id="calDisplay">No calibration</div>
 </div>
 
-<!-- QR overlay -->
-<div id="qrOverlay">
+<!-- QR overlay — hidden by default now -->
+<div id="qrOverlay" style="display:none">
   <h2>📱 Scan to open remote</h2>
   <img id="qrImg" src="" alt="QR">
   <div id="qrUrl"></div>
@@ -211,21 +211,17 @@ function autoFit(body){
     setTimeout(()=>document.getElementById('autofit').style.display='none',2000); return;
   }
   const hx=j.Head.x,hy=j.Head.y,bx=j.SpineBase.x,by=j.SpineBase.y;
-  // Tilt: angle of head-base vector from vertical
   cal.tilt = -Math.atan2(hx-bx, hy-by)*180/Math.PI;
-  // Rotate
   function rot(x,y){ const r=cal.tilt*Math.PI/180,c=Math.cos(r),s=Math.sin(r); return {x:x*c-y*s,y:x*s+y*c}; }
   const rH=rot(hx,hy), rB=rot(bx,by);
-  // Centre on body midpoint
   cal.xOff = -((rH.x+rB.x)/2);
   cal.yOff =  (rH.y+rB.y)/2;
-  // Scale to fill ~75% height
   const bodyH=Math.abs(rH.y-rB.y);
   const sc=bodyH>0?(0.75*1.2)/bodyH:1;
   cal.xSc=sc; cal.ySc=sc;
 
   updateCalDisplay();
-  // Broadcast to remote WS clients
+  // Send cal result back to the remote via the bridge
   broadcastCal();
   document.getElementById('fitResult').textContent='✓ Done! tilt='+cal.tilt.toFixed(1)+'° sc='+sc.toFixed(2);
   log('Auto-fit done');
@@ -237,6 +233,14 @@ function updateCalDisplay(){
     'tilt: <b>'+cal.tilt.toFixed(1)+'°</b><br>'+
     'xOff: <b>'+cal.xOff.toFixed(2)+'</b>  yOff: <b>'+cal.yOff.toFixed(2)+'</b><br>'+
     'scale: <b>'+cal.xSc.toFixed(2)+'</b>';
+}
+
+// Send cal back through the single ws connection so bridge broadcasts to all clients
+function broadcastCal(){
+  if(ws && ws.readyState===1){
+    ws.send(JSON.stringify({ type:'cal-result', cal: cal }));
+    log('Cal sent to remote');
+  }
 }
 
 // ── Draw loop ──
@@ -257,79 +261,62 @@ function draw(){
 function loop(){ draw(); requestAnimationFrame(loop); }
 loop();
 
-// ── Kinect WebSocket ──
-let ws;
+// ── Single WebSocket connection ──
+let ws, reconnectTimer;
+
 function connect(){
   const host=document.getElementById('host-input').value.trim()||'localhost';
-  if(ws)try{ws.close()}catch(e){}
+  clearTimeout(reconnectTimer);
+  if(ws){ try{ws.close();}catch(e){} ws=null; }
   log('Connecting to '+host+'…');
-  ws=new WebSocket('ws://'+host+':8766/');
-  ws.onopen=()=>{ document.getElementById('dot').classList.add('on'); document.getElementById('stext').textContent='Kinect: '+host; log('Kinect connected'); };
-  ws.onclose=()=>{ document.getElementById('dot').classList.remove('on'); document.getElementById('stext').textContent='Kinect disconnected'; lastBodies=[]; setTimeout(connect,3000); };
-  ws.onerror=()=>{};
-  ws.onmessage=(evt)=>{
-    let msg; try{msg=JSON.parse(evt.data)}catch(e){return;}
-    // Remote commands forwarded by bridge
+
+  ws = new WebSocket('ws://'+host+':8766/');
+
+  ws.onopen = () => {
+    document.getElementById('dot').classList.add('on');
+    document.getElementById('stext').textContent='Kinect: '+host;
+    log('Connected');
+  };
+
+  ws.onclose = () => {
+    document.getElementById('dot').classList.remove('on');
+    document.getElementById('stext').textContent='Disconnected';
+    lastBodies=[];
+    log('Disconnected — retry in 3s');
+    reconnectTimer = setTimeout(connect, 3000);
+  };
+
+  ws.onerror = () => {
+    // onclose will fire next, handles retry
+  };
+
+  ws.onmessage = (evt) => {
+    let msg; try{ msg=JSON.parse(evt.data); }catch(e){ return; }
+
+    // Remote → debug: commands from phone
     if(msg.type==='remote-autofit'){ startAutoFit(); return; }
-    if(msg.type==='remote-cal'){ Object.assign(cal,msg.cal); updateCalDisplay(); return; }
+    if(msg.type==='remote-cal'){ Object.assign(cal, msg.cal); updateCalDisplay(); return; }
     if(msg.type==='remote-reset'){ cal={xOff:0,yOff:0,xSc:1,ySc:1,tilt:0}; updateCalDisplay(); return; }
-    if(msg.type!=='bodies')return;
-    lastBodies=msg.bodies||[];
+
+    // Skeleton data from Kinect
+    if(msg.type!=='bodies') return;
+    lastBodies = msg.bodies||[];
     frameCount++;
     const now=Date.now();
-    if(now-lastFpsTime>=1000){fps=frameCount;frameCount=0;lastFpsTime=now;document.getElementById('fpsText').textContent=fps+' fps';}
+    if(now-lastFpsTime>=1000){ fps=frameCount; frameCount=0; lastFpsTime=now; document.getElementById('fpsText').textContent=fps+' fps'; }
     document.getElementById('bodyCount').textContent='Bodies: '+lastBodies.length;
   };
 }
-document.getElementById('connect-btn').onclick=connect;
+
+document.getElementById('connect-btn').onclick = connect;
 connect();
-
-// ── Remote WebSocket server (phone connects here) ──
-// Phone opens ws://192.168.0.20:8766
-// We run a tiny WS server by serving commands back
-// Since browser can't run WS server, we use a shared channel via Kinect bridge port trick
-// Instead: phone hits a simple HTTP endpoint we expose via a second WS on the bridge
-// SIMPLEST: phone just opens the debug page URL with ?remote=1 and communicates via BroadcastChannel
-// Actually: use BroadcastChannel — works same-origin, so phone needs same page
-// REAL solution: add a second WebSocket server to KinectBridge.cs on port 8766 for remote commands
-
-// For now use the simpler approach: remote page connects to port 8766 on the PC
-// KinectBridge will forward commands. But we don't have that yet.
-// So: use a polling approach — remote page POSTs to a tiny express server
-// OR: just hardcode the remote URL with the PC IP and use BroadcastChannel won't work cross-device
-
-// ── REAL SIMPLE: expose a WebSocket on 8766 from KinectBridge ──
-// For now, wire remote commands via the existing Kinect WS by sending special JSON
-let remoteWs=null, remoteClients=[];
-
-// We'll start a second WS listener inside the bridge — but for now
-// let's use a relay: remote connects to ws://PC_IP:8766
-// and we receive those commands here via a local WS on 8766
-
-// Since browser can't open server ports, use a workaround:
-// The remote page connects to the SAME bridge port (8766) with a special handshake
-let remoteCommandWs;
-function listenForRemote(){
-  // Connect to bridge port — bridge will echo back any non-body messages
-  // Actually just use a second connection and tag it
-  remoteCommandWs = new WebSocket('ws://'+(document.getElementById('host-input').value.trim()||'localhost')+':8766/');
-  remoteCommandWs.onmessage=(evt)=>{
-    let msg; try{msg=JSON.parse(evt.data)}catch(e){return;}
-    if(msg.type==='remote-autofit') startAutoFit();
-    if(msg.type==='remote-cal'){ Object.assign(cal,msg.cal); updateCalDisplay(); }
-    if(msg.type==='remote-reset'){ cal={xOff:0,yOff:0,xSc:1,ySc:1,tilt:0}; updateCalDisplay(); }
-  };
-}
-
-function broadcastCal(){ /* placeholder */ }
 
 // ── QR Code ──
 function showQR(){
-  const ip=document.getElementById('host-input').value.trim()||'192.168.0.20';
-  const url='https://maciek11123.github.io/Kid-Games/debug-remote.html?host='+encodeURIComponent(ip);
+  const ip = document.getElementById('host-input').value.trim()||'192.168.0.20';
+  const url = 'https://maciek11123.github.io/Kid-Games/debug-remote.html?host='+encodeURIComponent(ip);
   document.getElementById('qrUrl').textContent=url;
-  const qrSrc='https://api.qrserver.com/v1/create-qr-code/?size=200x200&data='+encodeURIComponent(url);
-  document.getElementById('qrImg').src=qrSrc;
+  document.getElementById('qrImg').src='https://api.qrserver.com/v1/create-qr-code/?size=200x200&data='+encodeURIComponent(url);
 }
 
 document.getElementById('btn-qr').onclick=()=>{
@@ -339,9 +326,6 @@ document.getElementById('btn-qr').onclick=()=>{
 document.getElementById('btnDismiss').onclick=()=>{
   document.getElementById('qrOverlay').style.display='none';
 };
-
-// Auto-show QR on load with default IP
-showQR();
 
 // ── Log ──
 const logLines=[];
