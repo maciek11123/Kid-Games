@@ -42,6 +42,12 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:24px; h
 
 #btnReset { padding:12px; font-size:12px; background:transparent; border:1px solid #222; border-radius:10px; color:#444; cursor:pointer; }
 #btnTune  { padding:10px; font-size:11px; background:transparent; border:1px solid #222; border-radius:8px; color:#444; cursor:pointer; }
+#btnMirror {
+  padding:16px; font-size:15px; font-weight:700;
+  background:#1a1a00; border:2px solid #880; color:#aa0;
+  border-radius:14px; cursor:pointer; text-align:center;
+}
+#btnMirror.active { background:#332200; border-color:#fa0; color:#fa0; }
 </style>
 </head>
 <body>
@@ -63,6 +69,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:24px; h
 
 <div id="fitStatus"></div>
 
+<button id="btnMirror">⬜ Front view</button>
+
 <button id="btnTune">⚙ Fine tune manually</button>
 
 <div id="fineTune">
@@ -81,6 +89,18 @@ const paramHost = params.get('host');
 if (paramHost) document.getElementById('hostInput').value = paramHost;
 
 let ws, connected = false, reconnectTimer;
+let mirrorX = false;
+
+function updateMirrorBtn(){
+  const btn = document.getElementById('btnMirror');
+  if(mirrorX){
+    btn.textContent = '🔄 Back view (mirrored)';
+    btn.classList.add('active');
+  } else {
+    btn.textContent = '⬜ Front view';
+    btn.classList.remove('active');
+  }
+}
 
 function connect() {
   const host = document.getElementById('hostInput').value.trim();
@@ -109,13 +129,17 @@ function connect() {
 
     if (msg.type === 'cal-result' && msg.cal) {
       const c = msg.cal;
-      // Update sliders to match auto-fit result
       setSlider('tilt',  c.tilt  || 0,    'tiltVal',  0);
       setSlider('xOff',  c.xOff  || 0,    'xOffVal',  2);
       setSlider('yOff',  c.yOff  || 0,    'yOffVal',  2);
       setSlider('sc',    c.xSc   || 1,    'scVal',    2);
 
-      // Show fine tune panel so they can see the result
+      // Sync mirror state if included
+      if (typeof msg.mirrorX === 'boolean') {
+        mirrorX = msg.mirrorX;
+        updateMirrorBtn();
+      }
+
       document.getElementById('fineTune').style.display = 'block';
       const fs = document.getElementById('fitStatus');
       fs.style.display = 'block';
@@ -180,11 +204,19 @@ function sendCal(){
   }});
 }
 
+document.getElementById('btnMirror').onclick = () => {
+  mirrorX = !mirrorX;
+  updateMirrorBtn();
+  send({ type:'remote-mirror', mirrorX: mirrorX });
+};
+
 document.getElementById('btnReset').onclick = () => {
   setSlider('xOff', 0, 'xOffVal', 2);
   setSlider('yOff', 0, 'yOffVal', 2);
   setSlider('tilt', 0, 'tiltVal', 0);
   setSlider('sc',   1, 'scVal',   2);
+  mirrorX = false;
+  updateMirrorBtn();
   document.getElementById('fitStatus').style.display = 'none';
   send({ type:'remote-reset' });
 };
