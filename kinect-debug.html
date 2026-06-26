@@ -60,6 +60,8 @@ canvas { position:fixed; inset:0; z-index:1; }
 #btn-qr { padding:5px 10px; background:#1a1; border:1px solid #0f0; color:#0f0; border-radius:4px; cursor:pointer; font-size:11px; }
 #btn-mirror { padding:5px 10px; background:#1a1a00; border:1px solid #880; color:#aa0; border-radius:4px; cursor:pointer; font-size:11px; }
 #btn-mirror.active { background:#332200; border-color:#fa0; color:#fa0; }
+#btn-flip { padding:5px 10px; background:#1a0a1a; border:1px solid #a4a; color:#f8f; border-radius:4px; cursor:pointer; font-size:11px; }
+#btn-flip.active { background:#3a1a3a; border-color:#f6f; color:#fcf; }
 #btn-autofit { padding:5px 12px; background:#003a1a; border:1px solid #0f0; color:#0f0; border-radius:4px; cursor:pointer; font-size:11px; font-weight:bold; }
 #btn-autofit:active { background:#0f0; color:#000; }
 #btn-tune { padding:5px 10px; background:#0a0a1a; border:1px solid #44a; color:#88f; border-radius:4px; cursor:pointer; font-size:11px; }
@@ -123,6 +125,7 @@ canvas { position:fixed; inset:0; z-index:1; }
   <button id="btn-tune">⚙ Tune</button>
   <button id="btn-reset">↺ Reset</button>
   <button id="btn-mirror">⬜ Front</button>
+  <button id="btn-flip">🙂 Normal</button>
   <button id="btn-qr">📱 QR</button>
 </div>
 
@@ -157,8 +160,11 @@ resize(); window.addEventListener('resize', resize);
 // ── Cal ──
 let cal = { xOff:0, yOff:0, xSc:1, ySc:1, tilt:0 };
 let mirrorX = false;
+let flip180 = false;  // for upside-down ceiling mount
 
 function applyKToC(x, y) {
+  // Upside-down mount: negate both axes first
+  if (flip180) { x = -x; y = -y; }
   const rad = cal.tilt * Math.PI / 180;
   const cos = Math.cos(rad), sin = Math.sin(rad);
   let rx    = x*cos - y*sin;
@@ -257,7 +263,9 @@ function autoFit(body){
     document.getElementById('fitResult').textContent='❌ Need full body visible';
     setTimeout(()=>document.getElementById('autofit').style.display='none',2000); return;
   }
-  const hx=j.Head.x,hy=j.Head.y,bx=j.SpineBase.x,by=j.SpineBase.y;
+  let hx=j.Head.x,hy=j.Head.y,bx=j.SpineBase.x,by=j.SpineBase.y;
+  // Match the flip applied in applyKToC so calibration lands correctly
+  if (flip180) { hx=-hx; hy=-hy; bx=-bx; by=-by; }
   cal.tilt = -Math.atan2(hx-bx, hy-by)*180/Math.PI;
   function rot(x,y){ const r=cal.tilt*Math.PI/180,c=Math.cos(r),s=Math.sin(r); return {x:x*c-y*s,y:x*s+y*c}; }
   const rH=rot(hx,hy), rB=rot(bx,by);
@@ -311,6 +319,15 @@ document.getElementById('btn-mirror').onclick = () => {
 // ── On-screen Auto-Fit button ──
 document.getElementById('btn-autofit').onclick = () => {
   startAutoFit();
+};
+
+// ── Flip 180° (upside-down ceiling mount) ──
+document.getElementById('btn-flip').onclick = () => {
+  flip180 = !flip180;
+  const btn = document.getElementById('btn-flip');
+  if(flip180){ btn.textContent='🙃 Flipped'; btn.classList.add('active'); }
+  else { btn.textContent='🙂 Normal'; btn.classList.remove('active'); }
+  log('Flip 180: ' + (flip180?'ON':'OFF'));
 };
 
 // ── Sync sliders FROM cal object ──
