@@ -48,6 +48,12 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:24px; h
   border-radius:14px; cursor:pointer; text-align:center;
 }
 #btnMirror.active { background:#332200; border-color:#fa0; color:#fa0; }
+#btnFlip {
+  padding:16px; font-size:15px; font-weight:700;
+  background:#1a0a1a; border:2px solid #a4a; color:#f8f;
+  border-radius:14px; cursor:pointer; text-align:center;
+}
+#btnFlip.active { background:#3a1a3a; border-color:#f6f; color:#fcf; }
 </style>
 </head>
 <body>
@@ -71,6 +77,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:24px; h
 
 <button id="btnMirror">⬜ Front view</button>
 
+<button id="btnFlip">🙂 Normal (right-side up)</button>
+
 <button id="btnTune">⚙ Fine tune manually</button>
 
 <div id="fineTune">
@@ -90,6 +98,7 @@ if (paramHost) document.getElementById('hostInput').value = paramHost;
 
 let ws, connected = false, reconnectTimer;
 let mirrorX = false;
+let flip180 = false;
 
 function updateMirrorBtn(){
   const btn = document.getElementById('btnMirror');
@@ -208,6 +217,14 @@ document.getElementById('btnMirror').onclick = () => {
   mirrorX = !mirrorX;
   updateMirrorBtn();
   send({ type:'remote-mirror', mirrorX: mirrorX });
+};
+
+document.getElementById('btnFlip').onclick = () => {
+  flip180 = !flip180;
+  const btn = document.getElementById('btnFlip');
+  if(flip180){ btn.textContent='🙃 Flipped (upside-down mount)'; btn.classList.add('active'); }
+  else { btn.textContent='🙂 Normal (right-side up)'; btn.classList.remove('active'); }
+  send({ type:'remote-flip', flip180: flip180 });
 };
 
 document.getElementById('btnReset').onclick = () => {
