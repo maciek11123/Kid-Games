@@ -434,6 +434,13 @@ function connect(){
     if(msg.type==='remote-cal'){ Object.assign(cal, msg.cal); updateCalDisplay(); return; }
     if(msg.type==='remote-reset'){ cal={xOff:0,yOff:0,xSc:1,ySc:1,tilt:0}; updateCalDisplay(); return; }
     if(msg.type==='remote-mirror'){ mirrorX = !!msg.mirrorX; updateMirrorBtn(); return; }
+    if(msg.type==='remote-flip'){
+      flip180 = !!msg.flip180;
+      const btn = document.getElementById('btn-flip');
+      if(flip180){ btn.textContent='🙃 Flipped'; btn.classList.add('active'); }
+      else { btn.textContent='🙂 Normal'; btn.classList.remove('active'); }
+      return;
+    }
 
     // Skeleton data from Kinect
     if(msg.type!=='bodies') return;
